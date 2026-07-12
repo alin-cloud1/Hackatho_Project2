@@ -12,8 +12,8 @@ pinned: false
 
 A full-stack web app for the Class 7-B resistance: log Captain Kuddus's tyranny,
 land the three anonymous strikes, and get him impeached. Six missions, a
-role-based UI, a Node/SQLite backend, and a free Gemini RAG syllabus negotiator —
-all served from **one Express server on one port**.
+role-based UI, a Node/SQLite backend, and a free LLM-powered RAG syllabus
+negotiator (Groq or Gemini) — all served from **one Express server on one port**.
 
 ## Stack
 - **Frontend:** React + Vite + TypeScript + Tailwind
