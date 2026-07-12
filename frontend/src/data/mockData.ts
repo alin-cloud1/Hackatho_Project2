@@ -1,25 +1,43 @@
 import type { RulebookEntry, Student } from "../types";
 
+// Kuddus (roll 01) is kept ONLY as the seat-planner target — his login has been
+// revoked by class decree (no pin, role undefined), so he can never access the app.
+export const KUDDUS: Student = {
+  rollNumber: "01",
+  name: "Kodu Kuddus",
+  heightCm: 158,
+  visionImpaired: false,
+  hearingImpaired: false,
+  isKuddus: true,
+};
+
 export const ROSTER: Student[] = [
-  { rollNumber: "01", name: "Kodu Kuddus", heightCm: 158, needsFrontRow: false, isKuddus: true, pin: "1111" },
-  { rollNumber: "02", name: "Biltu Rahman", heightCm: 149, needsFrontRow: false, pin: "2222" },
-  { rollNumber: "03", name: "Miltu Hasan", heightCm: 151, needsFrontRow: false, pin: "3333" },
-  { rollNumber: "04", name: "Farhan Kabir", heightCm: 172, needsFrontRow: false, pin: "1004" },
-  { rollNumber: "05", name: "Ayesha Noor", heightCm: 144, needsFrontRow: true, pin: "1005" },
-  { rollNumber: "06", name: "Rakib Islam", heightCm: 168, needsFrontRow: false, pin: "1006" },
-  { rollNumber: "07", name: "Tania Afrin", heightCm: 139, needsFrontRow: false, pin: "1007" },
-  { rollNumber: "08", name: "Shanto Dey", heightCm: 175, needsFrontRow: false, pin: "1008" },
-  { rollNumber: "09", name: "Nusrat Jahan", heightCm: 142, needsFrontRow: false, pin: "1009" },
-  { rollNumber: "10", name: "Imran Chowdhury", heightCm: 165, needsFrontRow: true, pin: "1010" },
-  { rollNumber: "11", name: "Priya Sarkar", heightCm: 147, needsFrontRow: false, pin: "1011" },
-  { rollNumber: "12", name: "Zubair Ahmed", heightCm: 178, needsFrontRow: false, pin: "1012" },
-  { rollNumber: "13", name: "Mim Akter", heightCm: 140, needsFrontRow: false, pin: "1013" },
-  { rollNumber: "14", name: "Sabbir Hossain", heightCm: 170, needsFrontRow: false, pin: "1014" },
-  { rollNumber: "15", name: "Ruma Begum", heightCm: 145, needsFrontRow: false, pin: "1015" },
-  { rollNumber: "16", name: "Arif Khan", heightCm: 180, needsFrontRow: false, pin: "1016" },
-  { rollNumber: "17", name: "Lamia Sultana", heightCm: 143, needsFrontRow: false, pin: "1017" },
-  { rollNumber: "18", name: "Nayeem Uddin", heightCm: 173, needsFrontRow: false, pin: "1018" },
+  KUDDUS,
+  // Admins — the resistance leadership. They oversee the dashboard & complaints
+  // but may NOT file complaints themselves.
+  { rollNumber: "00", name: "Rashid Sir", heightCm: 175, visionImpaired: false, hearingImpaired: false, role: "admin", isTeacher: true, pin: "0000" },
+  { rollNumber: "02", name: "Biltu Rahman", heightCm: 149, visionImpaired: false, hearingImpaired: false, role: "admin", pin: "2222" },
+  { rollNumber: "03", name: "Miltu Hasan", heightCm: 151, visionImpaired: false, hearingImpaired: false, role: "admin", pin: "3333" },
+  // General students — may file complaints and view only their own.
+  { rollNumber: "04", name: "Farhan Kabir", heightCm: 172, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1004" },
+  { rollNumber: "05", name: "Ayesha Noor", heightCm: 144, visionImpaired: true, hearingImpaired: false, role: "student", pin: "1005" },
+  { rollNumber: "06", name: "Rakib Islam", heightCm: 168, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1006" },
+  { rollNumber: "07", name: "Tania Afrin", heightCm: 139, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1007" },
+  { rollNumber: "08", name: "Shanto Dey", heightCm: 175, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1008" },
+  { rollNumber: "09", name: "Nusrat Jahan", heightCm: 142, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1009" },
+  { rollNumber: "10", name: "Imran Chowdhury", heightCm: 165, visionImpaired: false, hearingImpaired: true, role: "student", pin: "1010" },
+  { rollNumber: "11", name: "Priya Sarkar", heightCm: 147, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1011" },
+  { rollNumber: "12", name: "Zubair Ahmed", heightCm: 178, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1012" },
+  { rollNumber: "13", name: "Mim Akter", heightCm: 140, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1013" },
+  { rollNumber: "14", name: "Sabbir Hossain", heightCm: 170, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1014" },
+  { rollNumber: "15", name: "Ruma Begum", heightCm: 145, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1015" },
+  { rollNumber: "16", name: "Arif Khan", heightCm: 180, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1016" },
+  { rollNumber: "17", name: "Lamia Sultana", heightCm: 143, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1017" },
+  { rollNumber: "18", name: "Nayeem Uddin", heightCm: 173, visionImpaired: false, hearingImpaired: false, role: "student", pin: "1018" },
 ];
+
+/** Roster members who occupy a classroom desk (everyone except the teacher). */
+export const SEATABLE_ROSTER: Student[] = ROSTER.filter((s) => !s.isTeacher);
 
 export const RULEBOOK: RulebookEntry[] = [
   {

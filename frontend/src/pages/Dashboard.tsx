@@ -7,10 +7,11 @@ import {
   Siren,
   ShieldCheck,
   ArrowUpRight,
+  MapPin,
 } from "lucide-react";
 import { useAppState } from "../state/AppStateContext";
 import { StrikeMeter } from "../components/StrikeMeter";
-import { Card, PageHeader } from "../components/ui";
+import { Badge, Button, Card, PageHeader } from "../components/ui";
 
 const MISSIONS = [
   {
@@ -58,11 +59,12 @@ const MISSIONS = [
 ];
 
 export function Dashboard() {
-  const { complaints, ledger, sosAlerts, strikeCount, currentStudent } = useAppState();
+  const { complaints, ledger, sosAlerts, strikeCount, currentStudent, updateSosAlert } = useAppState();
 
   const totalCash = ledger.filter((e) => e.kind === "toll").reduce((s, e) => s + e.amountTaka, 0);
   const totalFoodItems = ledger.filter((e) => e.kind === "food").length;
   const activeSos = sosAlerts.filter((a) => a.status !== "acknowledged").length;
+  const sortedSos = [...sosAlerts].sort((a, b) => b.timestamp - a.timestamp);
 
   return (
     <div>
@@ -88,6 +90,55 @@ export function Dashboard() {
           </div>
         </Card>
       </div>
+
+      <Card className="mt-6 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Siren className={`h-4 w-4 ${activeSos > 0 ? "text-signal-400" : "text-ink-400"}`} />
+            <h3 className="font-display text-sm font-bold text-ink-100">Live SOS Alerts</h3>
+          </div>
+          {activeSos > 0 && <Badge tone="danger">{activeSos} active</Badge>}
+        </div>
+        <p className="mb-4 text-xs text-ink-400">
+          Distress signals sent by students are routed to the admins in real time and surface here
+          on the command center.
+        </p>
+        <div className="space-y-3">
+          {sortedSos.length === 0 && (
+            <p className="text-xs text-ink-500">No distress signals yet. All quiet.</p>
+          )}
+          {sortedSos.slice(0, 6).map((a) => (
+            <div
+              key={a.id}
+              className={`flex items-center justify-between rounded-xl border p-3.5 ${
+                a.status === "acknowledged"
+                  ? "border-ink-700 bg-ink-900/40 opacity-60"
+                  : "border-signal-500/40 bg-signal-500/10"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <MapPin className="h-4 w-4 text-signal-400" />
+                <div>
+                  <p className="text-sm font-semibold text-ink-100">{a.location}</p>
+                  <p className="text-[11px] text-ink-500">
+                    {new Date(a.timestamp).toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge tone={a.status === "queued" ? "warning" : a.status === "sent" ? "danger" : "success"}>
+                  {a.status}
+                </Badge>
+                {a.status !== "acknowledged" && (
+                  <Button variant="ghost" onClick={() => updateSosAlert(a.id, "acknowledged")}>
+                    Acknowledge
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <h2 className="mt-10 mb-4 font-display text-lg font-bold text-ink-100">Missions</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

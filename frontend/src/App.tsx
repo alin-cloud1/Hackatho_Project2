@@ -17,6 +17,14 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// Dashboard + aggregate views are for admins only (Biltu, Miltu, Rashid Sir).
+// General students are bounced to their own complaint portal.
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAppState();
+  if (!isAdmin) return <Navigate to="/whistleblower" replace />;
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <Routes>
@@ -28,7 +36,14 @@ function App() {
           </RequireAuth>
         }
       >
-        <Route path="/" element={<Dashboard />} />
+        <Route
+          path="/"
+          element={
+            <RequireAdmin>
+              <Dashboard />
+            </RequireAdmin>
+          }
+        />
         <Route path="/whistleblower" element={<Whistleblower />} />
         <Route path="/seating" element={<SeatPlannerPage />} />
         <Route path="/syllabus" element={<SyllabusNegotiator />} />

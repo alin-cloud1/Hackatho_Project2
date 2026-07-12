@@ -77,8 +77,14 @@ export function Login() {
 
           <p className="text-center text-[11px] leading-relaxed text-ink-500">
             Your roll number never leaves this device in plain form — complaints you file are
-            submitted under a one-way cryptographic hash. Demo roster: roll 01 (Kuddus, PIN 1111),
-            02 (Biltu, PIN 2222), 03 (Miltu, PIN 3333), 04–18 use PIN 1004–1018.
+            submitted under a one-way cryptographic hash. Kuddus (roll 01) has been permanently
+            locked out.
+            <br />
+            <span className="mt-1 inline-block">
+              <span className="font-semibold text-ink-400">Admins:</span> Rashid Sir (00 / 0000),
+              Biltu (02 / 2222), Miltu (03 / 3333). <span className="font-semibold text-ink-400">Students:</span>{" "}
+              04–18 use PIN 1004–1018.
+            </span>
           </p>
         </form>
       </div>

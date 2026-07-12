@@ -21,6 +21,8 @@ export function Ledger() {
   const { ledger, addLedgerEntry } = useAppState();
   const [kind, setKind] = useState<"toll" | "food">("toll");
   const [foodItem, setFoodItem] = useState(Object.keys(CALORIE_TABLE)[0]);
+  const [amount, setAmount] = useState("2"); // Taka the student was forced to hand over
+  const [amountError, setAmountError] = useState<string | null>(null);
 
   const totalCash = ledger.filter((e) => e.kind === "toll").reduce((s, e) => s + e.amountTaka, 0);
   const totalCalories = ledger.filter((e) => e.kind === "food").reduce((s, e) => s + e.calories, 0);
@@ -28,25 +30,32 @@ export function Ledger() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const entry: LedgerEntry =
-      kind === "toll"
-        ? {
-            id: crypto.randomUUID(),
-            kind: "toll",
-            label: "Washroom Toll",
-            amountTaka: 2,
-            calories: 0,
-            timestamp: Date.now(),
-          }
-        : {
-            id: crypto.randomUUID(),
-            kind: "food",
-            label: foodItem,
-            amountTaka: 0,
-            calories: CALORIE_TABLE[foodItem],
-            timestamp: Date.now(),
-          };
-    addLedgerEntry(entry);
+    if (kind === "toll") {
+      const taka = Number(amount);
+      if (!Number.isFinite(taka) || taka <= 0) {
+        setAmountError("Enter the amount of money taken (Tk).");
+        return;
+      }
+      setAmountError(null);
+      addLedgerEntry({
+        id: crypto.randomUUID(),
+        kind: "toll",
+        label: `Cash Extorted (${taka} Tk)`,
+        amountTaka: Math.round(taka),
+        calories: 0,
+        timestamp: Date.now(),
+      });
+      setAmount("2");
+    } else {
+      addLedgerEntry({
+        id: crypto.randomUUID(),
+        kind: "food",
+        label: foodItem,
+        amountTaka: 0,
+        calories: CALORIE_TABLE[foodItem],
+        timestamp: Date.now(),
+      });
+    }
   };
 
   const chartData = useMemo(() => {
@@ -182,10 +191,26 @@ export function Ledger() {
                   value={kind}
                   onChange={(e) => setKind(e.target.value as "toll" | "food")}
                 >
-                  <option value="toll">Washroom Toll (2 Tk)</option>
+                  <option value="toll">Cash / Washroom Toll</option>
                   <option value="food">Stolen Tiffin Item</option>
                 </select>
               </Field>
+              {kind === "toll" && (
+                <Field label="Amount of money taken (Tk)" hint="How much Kuddus forced you to pay.">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    className={inputClass}
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="e.g. 2"
+                  />
+                  {amountError && (
+                    <p className="mt-1 text-[11px] font-medium text-signal-400">{amountError}</p>
+                  )}
+                </Field>
+              )}
               {kind === "food" && (
                 <Field label="Item">
                   <select className={inputClass} value={foodItem} onChange={(e) => setFoodItem(e.target.value)}>

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Fingerprint, ImagePlus, Send, ShieldCheck, Clock } from "lucide-react";
+import { Fingerprint, ImagePlus, Send, ShieldCheck, Clock, EyeOff, Users } from "lucide-react";
 import { useAppState } from "../state/AppStateContext";
 import { hashRollNumber } from "../lib/crypto";
 import { stripImageMetadata } from "../lib/exif";
@@ -18,116 +18,60 @@ const CATEGORIES: ComplaintCategory[] = [
 ];
 
 export function Whistleblower() {
-  const { currentStudent, complaints, addComplaint, strikeCount } = useAppState();
-  const [category, setCategory] = useState<ComplaintCategory>("Tiffin Theft");
-  const [description, setDescription] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [stripping, setStripping] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const { currentStudent, complaints, addComplaint, strikeCount, isAdmin, isStudent } = useAppState();
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!currentStudent || !description.trim()) return;
-
-    let hasPhoto = false;
-    let photoStrippedMeta = false;
-    if (photo) {
-      setStripping(true);
-      try {
-        await stripImageMetadata(photo);
-        hasPhoto = true;
-        photoStrippedMeta = true;
-      } catch {
-        hasPhoto = true;
-        photoStrippedMeta = false;
-      }
-      setStripping(false);
+  // Resolve the current student's one-way hash so we can show them ONLY their
+  // own complaints without ever storing a raw roll number.
+  const [myHash, setMyHash] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (currentStudent && !currentStudent.isTeacher) {
+      hashRollNumber(currentStudent.rollNumber).then((h) => {
+        if (active) setMyHash(h);
+      });
     }
-
-    const submitterHash = await hashRollNumber(currentStudent.rollNumber);
-
-    const complaint: Complaint = {
-      id: crypto.randomUUID(),
-      category,
-      description: description.trim(),
-      submitterHash,
-      hasPhoto,
-      photoStrippedMeta,
-      timestamp: Date.now(),
+    return () => {
+      active = false;
     };
-    addComplaint(complaint);
-    setDescription("");
-    setPhoto(null);
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
-  };
+  }, [currentStudent]);
+
+  // Admins see the full log; students see only complaints tied to their hash.
+  const visibleComplaints = useMemo(() => {
+    if (isAdmin) return complaints;
+    if (myHash) return complaints.filter((c) => c.submitterHash === myHash);
+    return [];
+  }, [complaints, isAdmin, myHash]);
 
   return (
     <div>
       <PageHeader
         eyebrow="Mission 1"
-        title="Anonymous Whistleblower Portal"
-        description="Log Kuddus's daily atrocities. Your roll number is hashed client-side before submission — it never touches the complaint record in plain form."
+        title={isAdmin ? "Complaint Oversight" : "Anonymous Whistleblower Portal"}
+        description={
+          isAdmin
+            ? "Review every anonymous strike filed against Kuddus. Complaints are masked — you see the evidence, never the identity. Admins cannot file complaints."
+            : "Log Kuddus's daily atrocities. Your roll number is hashed client-side before submission — it never touches the complaint record in plain form. Only you can see the complaints you file."
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="p-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <Field label="Category">
-                <select
-                  className={inputClass}
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as ComplaintCategory)}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+          {isStudent && (
+            <ComplaintForm addComplaint={addComplaint} rollNumber={currentStudent!.rollNumber} />
+          )}
 
-              <Field label="Description" hint="Be specific — date, time, what happened.">
-                <textarea
-                  className={`${inputClass} min-h-28 resize-y`}
-                  placeholder="e.g. Charged 2 Taka for washroom access during 3rd period free time..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  required
-                />
-              </Field>
-
-              <Field label="Photo Evidence (optional)" hint="EXIF metadata is stripped automatically on upload.">
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-ink-600 bg-ink-900 px-3.5 py-3 text-sm text-ink-300 hover:border-electric-500">
-                  <ImagePlus className="h-4 w-4 shrink-0" />
-                  {photo ? photo.name : "Attach photo of the crime in progress"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-                  />
-                </label>
-              </Field>
-
-              <Button type="submit" disabled={stripping} className="w-full">
-                {stripping ? (
-                  "Stripping metadata..."
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" /> Submit Anonymously
-                  </>
-                )}
-              </Button>
-
-              {submitted && (
-                <p className="flex items-center gap-2 rounded-lg border border-mint-500/30 bg-mint-500/10 px-3 py-2 text-xs font-medium text-mint-400">
-                  <ShieldCheck className="h-4 w-4" /> Complaint logged. Identity masked and untraceable.
+          {isAdmin && (
+            <Card className="p-6">
+              <div className="flex items-center gap-3 rounded-xl border border-electric-500/30 bg-electric-500/10 px-4 py-3">
+                <Users className="h-5 w-5 shrink-0 text-electric-400" />
+                <p className="text-xs leading-relaxed text-ink-300">
+                  You are logged in as <span className="font-semibold text-ink-100">admin</span>.
+                  Admins oversee the resistance and cannot file complaints — only general students
+                  may submit strikes against Kuddus.
                 </p>
-              )}
-            </form>
-          </Card>
+              </div>
+            </Card>
+          )}
 
           <Card className="p-6">
             <div className="mb-4 flex items-center gap-2">
@@ -148,16 +92,32 @@ export function Whistleblower() {
         </div>
 
         <div className="space-y-6">
-          <StrikeMeter strikeCount={strikeCount} />
+          {/* The strike total is an aggregate — visible to admins only. */}
+          {isAdmin && <StrikeMeter strikeCount={strikeCount} />}
+
           <Card className="p-6">
-            <h3 className="mb-4 font-display text-sm font-bold text-ink-100">
-              Recent Anonymous Log ({complaints.length})
-            </h3>
-            <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
-              {complaints.length === 0 && (
-                <p className="text-xs text-ink-500">No complaints filed yet.</p>
+            <h3 className="mb-4 flex items-center gap-2 font-display text-sm font-bold text-ink-100">
+              {isAdmin ? (
+                <>Full Anonymous Log ({visibleComplaints.length})</>
+              ) : (
+                <>
+                  <EyeOff className="h-4 w-4 text-ink-400" /> My Complaints ({visibleComplaints.length})
+                </>
               )}
-              {complaints.map((c) => (
+            </h3>
+            {!isAdmin && (
+              <p className="mb-3 text-[11px] text-ink-500">
+                Only the complaints you personally filed are shown here. The class-wide total is
+                private to the admins.
+              </p>
+            )}
+            <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+              {visibleComplaints.length === 0 && (
+                <p className="text-xs text-ink-500">
+                  {isAdmin ? "No complaints filed yet." : "You haven't filed any complaints yet."}
+                </p>
+              )}
+              {visibleComplaints.map((c) => (
                 <div key={c.id} className="rounded-xl border border-ink-700 bg-ink-900/60 p-3">
                   <div className="mb-1.5 flex items-center justify-between">
                     <Badge tone="danger">{c.category}</Badge>
@@ -182,5 +142,115 @@ export function Whistleblower() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ComplaintForm({
+  addComplaint,
+  rollNumber,
+}: {
+  addComplaint: (c: Complaint) => void;
+  rollNumber: string;
+}) {
+  const [category, setCategory] = useState<ComplaintCategory>("Tiffin Theft");
+  const [description, setDescription] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [stripping, setStripping] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!description.trim()) return;
+
+    let hasPhoto = false;
+    let photoStrippedMeta = false;
+    if (photo) {
+      setStripping(true);
+      try {
+        await stripImageMetadata(photo);
+        hasPhoto = true;
+        photoStrippedMeta = true;
+      } catch {
+        hasPhoto = true;
+        photoStrippedMeta = false;
+      }
+      setStripping(false);
+    }
+
+    const submitterHash = await hashRollNumber(rollNumber);
+
+    const complaint: Complaint = {
+      id: crypto.randomUUID(),
+      category,
+      description: description.trim(),
+      submitterHash,
+      hasPhoto,
+      photoStrippedMeta,
+      timestamp: Date.now(),
+    };
+    addComplaint(complaint);
+    setDescription("");
+    setPhoto(null);
+    setSubmitted(true);
+    setTimeout(() => setSubmitted(false), 3000);
+  };
+
+  return (
+    <Card className="p-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Category">
+          <select
+            className={inputClass}
+            value={category}
+            onChange={(e) => setCategory(e.target.value as ComplaintCategory)}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Description" hint="Be specific — date, time, what happened.">
+          <textarea
+            className={`${inputClass} min-h-28 resize-y`}
+            placeholder="e.g. Charged 2 Taka for washroom access during 3rd period free time..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+          />
+        </Field>
+
+        <Field label="Photo Evidence (optional)" hint="EXIF metadata is stripped automatically on upload.">
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-ink-600 bg-ink-900 px-3.5 py-3 text-sm text-ink-300 hover:border-electric-500">
+            <ImagePlus className="h-4 w-4 shrink-0" />
+            {photo ? photo.name : "Attach photo of the crime in progress"}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        </Field>
+
+        <Button type="submit" disabled={stripping} className="w-full">
+          {stripping ? (
+            "Stripping metadata..."
+          ) : (
+            <>
+              <Send className="h-4 w-4" /> Submit Anonymously
+            </>
+          )}
+        </Button>
+
+        {submitted && (
+          <p className="flex items-center gap-2 rounded-lg border border-mint-500/30 bg-mint-500/10 px-3 py-2 text-xs font-medium text-mint-400">
+            <ShieldCheck className="h-4 w-4" /> Complaint logged. Identity masked and untraceable.
+          </p>
+        )}
+      </form>
+    </Card>
   );
 }

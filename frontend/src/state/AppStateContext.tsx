@@ -1,19 +1,22 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { Complaint, LedgerEntry, SosAlert, Student } from "../types";
+import type { Complaint, LedgerEntry, SeatProfile, SosAlert, Student } from "../types";
 import { ROSTER } from "../data/mockData";
 
-const STORAGE_KEY = "akp_state_v1";
-const SESSION_KEY = "akp_session_v1";
+const STORAGE_KEY = "akp_state_v2";
+const SESSION_KEY = "akp_session_v2";
 
 interface PersistedState {
   complaints: Complaint[];
   ledger: LedgerEntry[];
   sosAlerts: SosAlert[];
+  seatProfiles: Record<string, SeatProfile>; // keyed by roll number
 }
 
 interface AppState extends PersistedState {
   currentStudent: Student | null;
+  isAdmin: boolean;
+  isStudent: boolean;
   isOnline: boolean;
   login: (rollNumber: string, pin: string) => { ok: boolean; error?: string };
   logout: () => void;
@@ -21,19 +24,21 @@ interface AppState extends PersistedState {
   addLedgerEntry: (e: LedgerEntry) => void;
   addSosAlert: (a: SosAlert) => void;
   updateSosAlert: (id: string, status: SosAlert["status"]) => void;
+  setSeatProfile: (rollNumber: string, profile: SeatProfile) => void;
   strikeCount: number;
 }
 
 const AppStateContext = createContext<AppState | null>(null);
 
 function loadPersisted(): PersistedState {
+  const fallback: PersistedState = { complaints: [], ledger: [], sosAlerts: [], seatProfiles: {} };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return { ...fallback, ...JSON.parse(raw) };
   } catch {
     // ignore corrupt storage
   }
-  return { complaints: [], ledger: [], sosAlerts: [] };
+  return fallback;
 }
 
 function loadSession(): Student | null {
@@ -69,6 +74,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const login = useCallback((rollNumber: string, pin: string) => {
     const student = ROSTER.find((s) => s.rollNumber === rollNumber);
     if (!student) return { ok: false, error: "Roll number not recognized." };
+    // Kuddus's access has been revoked by class decree — he can never log in.
+    if (student.isKuddus || !student.pin || !student.role) {
+      return { ok: false, error: "This account has been revoked. Access denied by class decree." };
+    }
     if (student.pin !== pin) return { ok: false, error: "Incorrect secret PIN." };
     setCurrentStudent(student);
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(student));
@@ -99,12 +108,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setSeatProfile = useCallback((rollNumber: string, profile: SeatProfile) => {
+    setPersisted((prev) => ({
+      ...prev,
+      seatProfiles: { ...prev.seatProfiles, [rollNumber]: profile },
+    }));
+  }, []);
+
   const strikeCount = Math.min(3, persisted.complaints.length);
+  const isAdmin = currentStudent?.role === "admin";
+  const isStudent = currentStudent?.role === "student";
 
   const value = useMemo<AppState>(
     () => ({
       ...persisted,
       currentStudent,
+      isAdmin,
+      isStudent,
       isOnline,
       login,
       logout,
@@ -112,9 +132,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addLedgerEntry,
       addSosAlert,
       updateSosAlert,
+      setSeatProfile,
       strikeCount,
     }),
-    [persisted, currentStudent, isOnline, login, logout, addComplaint, addLedgerEntry, addSosAlert, updateSosAlert, strikeCount]
+    [persisted, currentStudent, isAdmin, isStudent, isOnline, login, logout, addComplaint, addLedgerEntry, addSosAlert, updateSosAlert, setSeatProfile, strikeCount]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

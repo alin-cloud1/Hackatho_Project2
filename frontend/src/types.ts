@@ -1,10 +1,27 @@
+export type Role = "admin" | "student";
+
 export interface Student {
   rollNumber: string;
   name: string;
   heightCm: number;
-  needsFrontRow: boolean; // vision/hearing impairment accommodation
+  visionImpaired: boolean; // must sit front, never in Kuddus's column
+  hearingImpaired: boolean; // must sit front, never in Kuddus's column
+  role?: Role; // admins (Biltu, Miltu, Rashid Sir) vs students; undefined = Kuddus (no access)
   isKuddus?: boolean;
-  pin: string; // mock secret credential for roll-number auth
+  isTeacher?: boolean; // Rashid Sir — has a login but no classroom seat
+  pin?: string; // mock secret credential; Kuddus has none (login revoked)
+}
+
+/** Derived: a student needing front-row accommodation for vision/hearing. */
+export function needsFrontRow(s: Pick<Student, "visionImpaired" | "hearingImpaired">): boolean {
+  return s.visionImpaired || s.hearingImpaired;
+}
+
+/** Self-service seat attributes a student can edit for their own roll number. */
+export interface SeatProfile {
+  heightCm: number;
+  visionImpaired: boolean;
+  hearingImpaired: boolean;
 }
 
 export type ComplaintCategory =

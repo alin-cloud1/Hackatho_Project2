@@ -1,8 +1,5 @@
-import type { SeatAssignment, Student } from "../types";
-
-export const PODIUM_EYE_HEIGHT_CM = 160;
-const SEATED_RATIO = 0.55; // rough seated-head-height as a fraction of standing height
-const CLEARANCE_CM = 6; // margin the sightline must clear above a blocker's head
+import type { SeatAssignment, SeatId, Student } from "../types";
+import { needsFrontRow } from "../types";
 
 export interface SeatPlanResult {
   grid: SeatAssignment[][];
@@ -10,15 +7,14 @@ export interface SeatPlanResult {
   cols: number;
   aisleCols: Set<number>;
   kuddusSeat: { row: number; col: number } | null;
+  kuddusCol: number | null;
+  /** Seats in front of Kuddus (his column) that are NOT shorter than him — should always be empty. */
   blockedBy: SeatId[];
-  swapLog: { studentName: string; from: string; to: string }[];
+  /** Seats holding vision/hearing-impaired students (front of the other columns). */
+  accessibilitySeats: SeatId[];
   lineOfSightClear: boolean;
-}
-
-type SeatId = string;
-
-function seatedHead(heightCm: number): number {
-  return heightCm * SEATED_RATIO + 45; // + desk/chair base offset
+  unseated: Student[];
+  notes: string[];
 }
 
 function seatKey(row: number, col: number): SeatId {
@@ -40,109 +36,138 @@ function emptyGrid(rows: number, cols: number): SeatAssignment[][] {
   );
 }
 
-function flatten(grid: SeatAssignment[][]): SeatAssignment[] {
-  return grid.flat();
-}
+const byHeightAsc = (a: Student, b: Student) => a.heightCm - b.heightCm;
 
-/** Sightline height (cm) the teacher's eye-line occupies at a given row, aiming at a target seat. */
-function sightlineHeightAtRow(rowIndex: number, targetRow: number, targetHeight: number): number {
-  const t = (rowIndex + 1) / (targetRow + 1);
-  return PODIUM_EYE_HEIGHT_CM + t * (targetHeight - PODIUM_EYE_HEIGHT_CM);
-}
-
-function findBlockers(grid: SeatAssignment[][], kRow: number, kCol: number): SeatAssignment[] {
-  const target = grid[kRow][kCol].student;
-  if (!target) return [];
-  const targetHeight = seatedHead(target.heightCm);
-  const blockers: SeatAssignment[] = [];
-  for (let r = 0; r < kRow; r++) {
-    const seat = grid[r][kCol];
-    if (!seat.student) continue;
-    const ceiling = sightlineHeightAtRow(r, kRow, targetHeight) - CLEARANCE_CM;
-    if (seatedHead(seat.student.heightCm) > ceiling) {
-      blockers.push(seat);
-    }
-  }
-  return blockers;
-}
-
+/**
+ * Seat planner built around Kuddus's anti-camouflage rules:
+ *
+ *  1. Kuddus sits in one dedicated column ("Kuddus's column").
+ *  2. Only students SHORTER than Kuddus may sit in front of him in that column,
+ *     so Rashid Sir always has a clear line of sight to Kuddus's desk.
+ *  3. Vision/hearing-impaired students never sit in Kuddus's column — they get
+ *     the front seats of the OTHER columns.
+ *  4. Everyone else is seated by ascending height, front to back.
+ */
 export function planSeats(
   students: Student[],
   rows: number,
   cols: number,
-  aisleCols: Set<number> = new Set()
+  aisleCols: Set<number> = new Set(),
+  kuddusColPref?: number
 ): SeatPlanResult {
   const grid = emptyGrid(rows, cols);
-  const cols_ = usableColumns(cols, aisleCols);
-  const seatOrder: [number, number][] = [];
-  for (let r = 0; r < rows; r++) for (const c of cols_) seatOrder.push([r, c]);
+  const notes: string[] = [];
+  const usable = usableColumns(cols, aisleCols);
 
-  const frontNeeds = students.filter((s) => s.needsFrontRow).sort((a, b) => a.heightCm - b.heightCm);
-  const rest = students.filter((s) => !s.needsFrontRow).sort((a, b) => a.heightCm - b.heightCm);
-  const ordered = [...frontNeeds, ...rest];
+  const kuddus = students.find((s) => s.isKuddus) ?? null;
+  const others = students.filter((s) => !s.isKuddus);
 
-  let seatIdx = 0;
-  for (const student of ordered) {
-    if (seatIdx >= seatOrder.length) break;
-    const [r, c] = seatOrder[seatIdx];
-    grid[r][c].student = student;
-    seatIdx++;
+  if (usable.length === 0) {
+    return {
+      grid, rows, cols, aisleCols,
+      kuddusSeat: null, kuddusCol: null, blockedBy: [], accessibilitySeats: [],
+      lineOfSightClear: false, unseated: students,
+      notes: ["No usable columns — every column is an aisle."],
+    };
   }
 
+  // Kuddus's column: prefer a caller choice, else the rightmost usable column.
+  const kuddusCol =
+    kuddusColPref != null && usable.includes(kuddusColPref)
+      ? kuddusColPref
+      : usable[usable.length - 1];
+  const otherCols = usable.filter((c) => c !== kuddusCol);
+
+  const impaired = others.filter((s) => needsFrontRow(s)).sort(byHeightAsc);
+  const regular = others.filter((s) => !needsFrontRow(s)).sort(byHeightAsc);
+
+  const kuddusHeight = kuddus?.heightCm ?? Infinity;
+  // Only non-impaired students strictly shorter than Kuddus can sit ahead of him.
+  const shorterThanKuddus = regular.filter((s) => s.heightCm < kuddusHeight);
+  const notShorter = regular.filter((s) => s.heightCm >= kuddusHeight);
+
+  const unseated: Student[] = [];
+  const accessibilitySeats: SeatId[] = [];
+
+  // ---- Step A: Kuddus's column -----------------------------------------
   let kuddusSeat: { row: number; col: number } | null = null;
-  for (const seat of flatten(grid)) {
-    if (seat.student?.isKuddus) kuddusSeat = { row: seat.row, col: seat.col };
+  let overflowShorter: Student[] = [];
+
+  if (kuddus) {
+    const frontCapacity = Math.max(0, rows - 1); // leave a seat behind the shorter ones for Kuddus
+    const front = shorterThanKuddus.slice(0, frontCapacity);
+    overflowShorter = shorterThanKuddus.slice(frontCapacity);
+
+    front.forEach((s, i) => {
+      grid[i][kuddusCol].student = s;
+    });
+    const kuddusRow = front.length; // directly behind the shorter students
+    grid[kuddusRow][kuddusCol].student = kuddus;
+    kuddusSeat = { row: kuddusRow, col: kuddusCol };
+    notes.push(
+      `Kuddus seated at row ${kuddusRow + 1}, column ${kuddusCol + 1}; ${front.length} shorter ` +
+        `student(s) placed in front of him so the podium keeps a clear line of sight.`
+    );
+  } else {
+    // No Kuddus in roster — his column just behaves like any other column.
+    overflowShorter = shorterThanKuddus;
   }
 
-  const swapLog: { studentName: string; from: string; to: string }[] = [];
+  // ---- Step B: other columns (impaired first, then everyone else) -------
+  // Front-to-back, left-to-right seat order across the non-Kuddus columns.
+  const otherSeats: SeatAssignment[] = [];
+  for (let r = 0; r < rows; r++) for (const c of otherCols) otherSeats.push(grid[r][c]);
 
+  // Remaining students to place in the other columns, in priority order:
+  // impaired (front) → then remaining regulars by ascending height.
+  const remainingPool = [...overflowShorter, ...notShorter].sort(byHeightAsc);
+  const otherQueue = [...impaired, ...remainingPool];
+
+  if (impaired.length > 0) {
+    notes.push(
+      `${impaired.length} vision/hearing-impaired student(s) placed at the front of the ` +
+        `non-Kuddus columns — never in Kuddus's column.`
+    );
+  }
+
+  let qi = 0;
+  for (const seat of otherSeats) {
+    if (qi >= otherQueue.length) break;
+    const student = otherQueue[qi++];
+    seat.student = student;
+    if (needsFrontRow(student)) accessibilitySeats.push(seat.seatId);
+  }
+
+  // ---- Step C: overflow into the seats BEHIND Kuddus (never blocks view) -
+  if (qi < otherQueue.length && kuddusSeat) {
+    for (let r = kuddusSeat.row + 1; r < rows && qi < otherQueue.length; r++) {
+      const seat = grid[r][kuddusCol];
+      if (!seat.student) {
+        const student = otherQueue[qi++];
+        seat.student = student;
+        if (needsFrontRow(student)) accessibilitySeats.push(seat.seatId);
+      }
+    }
+  }
+  while (qi < otherQueue.length) unseated.push(otherQueue[qi++]);
+  if (unseated.length > 0) {
+    notes.push(`${unseated.length} student(s) could not be seated — grid is too small.`);
+  }
+
+  // ---- Verify the line of sight to Kuddus ------------------------------
+  const blockedBy: SeatId[] = [];
   if (kuddusSeat) {
-    let guard = 0;
-    while (guard < 30) {
-      guard++;
-      const blockers = findBlockers(grid, kuddusSeat.row, kuddusSeat.col);
-      if (blockers.length === 0) break;
-
-      // tallest blocker gets moved
-      blockers.sort((a, b) => (b.student?.heightCm ?? 0) - (a.student?.heightCm ?? 0));
-      const blocker = blockers[0];
-
-      // find shortest-height swap target seated behind Kuddus's row, not a front-row-locked student
-      const candidates = flatten(grid).filter(
-        (s) =>
-          s.row > kuddusSeat!.row &&
-          s.student &&
-          !s.student.needsFrontRow &&
-          !s.student.isKuddus
-      );
-      candidates.sort((a, b) => (a.student?.heightCm ?? 999) - (b.student?.heightCm ?? 999));
-      const swapTarget = candidates[0];
-
-      if (!swapTarget || !blocker.student) break;
-
-      const blockerName = blocker.student.name;
-      const a = blocker.student;
-      const b = swapTarget.student;
-      grid[blocker.row][blocker.col].student = b;
-      grid[swapTarget.row][swapTarget.col].student = a;
-      swapLog.push({
-        studentName: blockerName,
-        from: seatKey(blocker.row, blocker.col),
-        to: seatKey(swapTarget.row, swapTarget.col),
-      });
+    for (let r = 0; r < kuddusSeat.row; r++) {
+      const seat = grid[r][kuddusCol];
+      if (seat.student && seat.student.heightCm >= kuddusHeight) blockedBy.push(seat.seatId);
     }
   }
 
-  const finalBlockers = kuddusSeat ? findBlockers(grid, kuddusSeat.row, kuddusSeat.col) : [];
-
   return {
-    grid,
-    rows,
-    cols,
-    aisleCols,
-    kuddusSeat,
-    blockedBy: finalBlockers.map((b) => b.seatId),
-    swapLog,
-    lineOfSightClear: finalBlockers.length === 0,
+    grid, rows, cols, aisleCols,
+    kuddusSeat, kuddusCol,
+    blockedBy, accessibilitySeats,
+    lineOfSightClear: kuddusSeat != null && blockedBy.length === 0,
+    unseated, notes,
   };
 }
