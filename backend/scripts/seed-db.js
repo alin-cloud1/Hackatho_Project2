@@ -2,9 +2,14 @@
 // precomputes embeddings for rulebook + curriculum (used by semantic search
 // and RAG retrieval). Run: npm run db:seed
 import { db, query } from "../src/db.js";
-import { ragEnabled } from "../src/config.js";
+import { embeddingsEnabled } from "../src/config.js";
 import { embedText } from "../src/services/rag.js";
 import { ROSTER, RULEBOOK, CURRICULUM_TOPICS } from "../src/data/seedData.js";
+
+// Precompute embeddings during seeding only when the provider supports them
+// (Gemini) and it isn't disabled (e.g. Docker startup skips them for a fast
+// boot — the syllabus RAG still works via full-curriculum context injection).
+const embedDuringSeed = embeddingsEnabled && process.env.SEED_EMBEDDINGS !== "false";
 
 async function seedStudents() {
   for (const s of ROSTER) {
@@ -24,7 +29,7 @@ async function seedStudents() {
 async function seedRulebook() {
   for (const r of RULEBOOK) {
     let embedding = null;
-    if (ragEnabled) {
+    if (embedDuringSeed) {
       try {
         embedding = await embedText(`${r.section}. ${r.body}`);
       } catch (err) {
@@ -39,7 +44,7 @@ async function seedRulebook() {
       [r.id, r.section, r.body, JSON.stringify(r.keywords), embedding ? JSON.stringify(embedding) : null]
     );
   }
-  console.log(`✓ Seeded ${RULEBOOK.length} rulebook articles${ragEnabled ? " (with embeddings)" : ""}.`);
+  console.log(`✓ Seeded ${RULEBOOK.length} rulebook articles${embedDuringSeed ? " (with embeddings)" : ""}.`);
 }
 
 async function seedCurriculum() {
@@ -52,7 +57,7 @@ async function seedCurriculum() {
   }
   for (const topic of CURRICULUM_TOPICS) {
     let embedding = null;
-    if (ragEnabled) {
+    if (embedDuringSeed) {
       try {
         embedding = await embedText(topic);
       } catch (err) {
@@ -64,14 +69,14 @@ async function seedCurriculum() {
       embedding ? JSON.stringify(embedding) : null,
     ]);
   }
-  console.log(`✓ Seeded ${CURRICULUM_TOPICS.length} curriculum topics${ragEnabled ? " (with embeddings)" : ""}.`);
+  console.log(`✓ Seeded ${CURRICULUM_TOPICS.length} curriculum topics${embedDuringSeed ? " (with embeddings)" : ""}.`);
 }
 
 async function main() {
   await seedStudents();
   await seedRulebook();
   await seedCurriculum();
-  console.log(ragEnabled ? "Done. RAG embeddings ready." : "Done. (No GEMINI_API_KEY — semantic features use local fallback.)");
+  console.log(embedDuringSeed ? "Done. RAG embeddings ready." : "Done. (LLM RAG uses full-context injection; no local embeddings needed.)");
   db.close();
 }
 

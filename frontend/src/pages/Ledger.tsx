@@ -14,7 +14,6 @@ import {
 import { Coins, Flame, PlusCircle, Zap } from "lucide-react";
 import { useAppState } from "../state/AppStateContext";
 import { CALORIE_TABLE, CRICKET_BAT_PRICE_TAKA, JHALMURI_PACKET_PRICE_TAKA } from "../data/mockData";
-import type { LedgerEntry } from "../types";
 import { Badge, Button, Card, Field, PageHeader, inputClass } from "../components/ui";
 
 export function Ledger() {

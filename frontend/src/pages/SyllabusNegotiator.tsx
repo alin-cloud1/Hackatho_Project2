@@ -92,14 +92,15 @@ export function SyllabusNegotiator() {
               instead of reaching the study plan.
             </p>
             <p className="mt-2 text-[11px] text-ink-500">
-              This calls the backend RAG service. With a{" "}
-              <code className="rounded bg-ink-900 px-1 py-0.5">GEMINI_API_KEY</code> set, it uses
-              real embeddings + generation (Google Gemini free tier); otherwise it falls back to a
-              local keyword filter.
+              This calls the backend RAG service. With a free{" "}
+              <code className="rounded bg-ink-900 px-1 py-0.5">GROQ_API_KEY</code> or{" "}
+              <code className="rounded bg-ink-900 px-1 py-0.5">GEMINI_API_KEY</code> set, it uses a
+              real LLM to cross-reference against the curriculum; otherwise it falls back to a local
+              keyword filter.
               {mode && (
                 <>
                   {" "}
-                  Last run: <span className="font-semibold text-ink-300">{mode === "rag" ? "Gemini RAG" : "local fallback"}</span>.
+                  Last run: <span className="font-semibold text-ink-300">{mode === "rag" ? "AI RAG" : "local fallback"}</span>.
                 </>
               )}
             </p>

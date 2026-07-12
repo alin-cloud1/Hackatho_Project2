@@ -114,8 +114,15 @@ export interface FactCheckResult {
 
 /** Open the SOS WebSocket feed. Returns the socket (caller handles messages). */
 export function openSosSocket(): WebSocket | null {
-  if (!apiEnabled) return null;
   const token = getToken();
-  const wsUrl = API_URL.replace(/^http/, "ws") + `/ws${token ? `?token=${token}` : ""}`;
-  return new WebSocket(wsUrl);
+  // Same-origin (single-server build) when API_URL is empty; otherwise derive
+  // the ws:// host from the configured API base.
+  let base: string;
+  if (API_URL) {
+    base = API_URL.replace(/^http/, "ws");
+  } else {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    base = `${proto}://${window.location.host}`;
+  }
+  return new WebSocket(`${base}/ws${token ? `?token=${token}` : ""}`);
 }

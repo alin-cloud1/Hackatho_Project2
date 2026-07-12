@@ -1,42 +1,113 @@
-import { config, ragEnabled } from "../config.js";
+import { config, ragEnabled, llmProvider, embeddingsEnabled } from "../config.js";
 import { query } from "../db.js";
 import { CURRICULUM_TOPICS } from "../data/seedData.js";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const REQUEST_TIMEOUT_MS = 20000;
+
+function withTimeout() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  return { signal: controller.signal, done: () => clearTimeout(timer) };
+}
 
 // ---------------------------------------------------------------------------
 // Gemini REST helpers (no SDK dependency — uses built-in fetch).
+// Auth is sent via the x-goog-api-key header so the key never lands in URLs/logs.
 // ---------------------------------------------------------------------------
 
-export async function embedText(text) {
-  const url = `${GEMINI_BASE}/${config.gemini.embedModel}:embedContent?key=${config.gemini.apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: `models/${config.gemini.embedModel}`,
-      content: { parts: [{ text }] },
-    }),
-  });
-  if (!res.ok) throw new Error(`Gemini embed failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  return data.embedding.values;
+async function geminiFetch(path, body) {
+  if (!config.gemini.apiKey) throw new Error("GEMINI_API_KEY is not set");
+  const t = withTimeout();
+  try {
+    const res = await fetch(`${GEMINI_BASE}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": config.gemini.apiKey },
+      body: JSON.stringify(body),
+      signal: t.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`Gemini ${res.status} ${res.statusText}: ${detail.slice(0, 300)}`);
+    }
+    return await res.json();
+  } finally {
+    t.done();
+  }
 }
 
-async function generateJson(prompt) {
-  const url = `${GEMINI_BASE}/${config.gemini.genModel}:generateContent?key=${config.gemini.apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
-    }),
+/** Embeddings — Gemini only (Groq has no embeddings endpoint). */
+export async function embedText(text) {
+  if (!embeddingsEnabled) throw new Error("Embeddings unavailable for this provider");
+  const data = await geminiFetch(`${config.gemini.embedModel}:embedContent`, {
+    model: `models/${config.gemini.embedModel}`,
+    content: { parts: [{ text }] },
   });
-  if (!res.ok) throw new Error(`Gemini generate failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-  return JSON.parse(raw);
+  const values = data?.embedding?.values;
+  if (!Array.isArray(values)) throw new Error("Gemini embed returned no vector");
+  return values;
+}
+
+/** Tolerant JSON extraction — handles ```json fences or prose around the object. */
+function parseJsonLoose(text) {
+  if (!text) throw new Error("LLM returned empty output");
+  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(t);
+  } catch {
+    const match = t.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error("LLM returned non-JSON output");
+  }
+}
+
+async function geminiGenerateJson(prompt) {
+  const data = await geminiFetch(`${config.gemini.genModel}:generateContent`, {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 2048 },
+  });
+  const finish = data?.candidates?.[0]?.finishReason;
+  if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
+    throw new Error(`Gemini stopped early (${finish})`);
+  }
+  return parseJsonLoose(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
+}
+
+async function groqGenerateJson(prompt) {
+  if (!config.groq.apiKey) throw new Error("GROQ_API_KEY is not set");
+  const t = withTimeout();
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.groq.apiKey}` },
+      body: JSON.stringify({
+        model: config.groq.model,
+        messages: [
+          { role: "system", content: "You are a precise assistant. Respond ONLY with valid JSON — no markdown, no prose." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 2048,
+        response_format: { type: "json_object" },
+      }),
+      signal: t.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`Groq ${res.status} ${res.statusText}: ${detail.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    return parseJsonLoose(data?.choices?.[0]?.message?.content ?? "");
+  } finally {
+    t.done();
+  }
+}
+
+/** Provider-agnostic JSON generation. Exported for the fact-checker too. */
+export async function generateJson(prompt) {
+  if (llmProvider === "groq") return groqGenerateJson(prompt);
+  return geminiGenerateJson(prompt);
 }
 
 function cosineSimilarity(a, b) {
@@ -56,9 +127,16 @@ function cosineSimilarity(a, b) {
 // text (the "official curriculum" context injected into the LLM prompt).
 // ---------------------------------------------------------------------------
 
-async function retrieveCurriculumContext(syllabusText, topK = 8) {
+async function retrieveCurriculumContext(syllabusText, topK = 12) {
   const { rows } = await query("SELECT topic, embedding FROM curriculum_topics WHERE embedding IS NOT NULL");
-  if (rows.length === 0) return CURRICULUM_TOPICS.slice(0, topK);
+
+  // No stored embeddings yet (e.g. the key was added AFTER seeding). The
+  // curriculum is small, so inject ALL topics as context rather than a weak
+  // slice — the LLM still gets the full ground truth to filter against.
+  if (rows.length === 0) {
+    const all = await query("SELECT topic FROM curriculum_topics");
+    return all.rows.length ? all.rows.map((r) => r.topic) : CURRICULUM_TOPICS;
+  }
 
   const queryVec = await embedText(syllabusText);
   return rows
@@ -87,30 +165,46 @@ export async function summarizeSyllabus(rawText, testDate) {
 async function ragSummarize(rawText, testDate) {
   const context = await retrieveCurriculumContext(rawText);
 
-  const prompt = `You are a study assistant for a Class 7 student. A tyrannical class captain named Kuddus has announced a bloated, padded syllabus and included non-examinable junk (e.g. "the writer's biography", "the index", "the barcode on the back cover").
+  const today = new Date().toISOString().slice(0, 10);
+  const prompt = `You are a precise study assistant for a Class 7 student. A tyrannical class captain, Kuddus, announced a padded syllabus mixing real topics with non-examinable junk (front/back matter such as the writer's biography, the index, the barcode, the acknowledgements, the publisher's address, dedication, preface, glossary, ISBN, table of contents, chapter/page ranges like "Chapters 1 to 7").
 
-OFFICIAL CURRICULUM CONTEXT (retrieved — the ONLY examinable topics):
+OFFICIAL CURRICULUM — these are the ONLY examinable topics. You MUST NOT invent topics outside this list, and you MUST copy the titles EXACTLY as written here:
 ${context.map((t) => `- ${t}`).join("\n")}
 
 KUDDUS'S RAW SYLLABUS TEXT:
 """${rawText}"""
 
-Cross-reference the raw syllabus against the official curriculum context. Return ONLY valid JSON of the form:
+TASK — reason step by step, then output ONLY the JSON:
+1. For every official curriculum topic above, decide if Kuddus's text refers to it (allow paraphrases, synonyms, and partial wording). If yes, put the EXACT official title in "keptTopics".
+2. Put every piece of Kuddus's text that is padding / non-examinable junk (front or back matter, page/chapter ranges, vague filler) into "filteredOut", quoting his wording.
+3. Never place a topic in both lists. Never keep a topic that is not in the official curriculum.
+4. Build a "studyPlan" distributing keptTopics across days from today (${today}) up to the test date ${testDate || "(about one week out)"}, front-loaded, ~40 minutes per topic (a day may hold multiple topics; set "minutes" to 40 × topics that day).
+
+Return ONLY valid JSON, no markdown:
 {
-  "keptTopics": ["<clean examinable topic titles that match the curriculum>"],
-  "filteredOut": ["<the non-examinable junk you removed>"],
-  "studyPlan": [
-    { "day": 1, "date": "YYYY-MM-DD", "topics": ["..."], "minutes": 80 }
-  ]
-}
-The study plan must distribute keptTopics across the days between today and the test date ${testDate || "(about one week out)"}, front-loaded, roughly 40 minutes per topic. Today is ${new Date().toISOString().slice(0, 10)}.`;
+  "keptTopics": ["<exact official titles>"],
+  "filteredOut": ["<Kuddus's junk, quoted>"],
+  "studyPlan": [ { "day": 1, "date": "YYYY-MM-DD", "topics": ["<exact official titles>"], "minutes": 40 } ]
+}`;
 
   const result = await generateJson(prompt);
+
+  // Guard against hallucination: keep only titles that actually exist in the
+  // retrieved curriculum context (case-insensitive), preserving official casing.
+  const canonical = new Map(context.map((t) => [t.toLowerCase().trim(), t]));
+  const keptTopics = [...new Set((Array.isArray(result.keptTopics) ? result.keptTopics : [])
+    .map((t) => canonical.get(String(t).toLowerCase().trim()))
+    .filter(Boolean))];
+
+  const studyPlan = Array.isArray(result.studyPlan) && result.studyPlan.length
+    ? result.studyPlan
+    : buildStudyPlan(keptTopics, testDate);
+
   return {
     mode: "rag",
-    keptTopics: Array.isArray(result.keptTopics) ? result.keptTopics : [],
+    keptTopics,
     filteredOut: Array.isArray(result.filteredOut) ? result.filteredOut : [],
-    studyPlan: Array.isArray(result.studyPlan) ? result.studyPlan : buildStudyPlan(result.keptTopics || [], testDate),
+    studyPlan,
     retrievedContext: context,
   };
 }
@@ -119,49 +213,96 @@ The study plan must distribute keptTopics across the days between today and the 
 // Local fallback (no API key): word-overlap similarity against the curriculum.
 // ---------------------------------------------------------------------------
 
-const STOPWORDS = new Set(["the", "a", "an", "and", "or", "of", "in", "on", "to", "for", "with", "is", "are", "at", "by", "from", "as", "also", "cover", "detail", "entire", "plus", "forget", "dont"]);
+const STOPWORDS = new Set(["the", "a", "an", "and", "or", "of", "in", "on", "to", "for", "with", "is", "are", "at", "by", "from", "as", "also", "cover", "detail", "entire", "plus", "forget", "dont", "study", "chapter", "chapters", "page", "pages", "including", "back", "front", "test", "mark", "marks"]);
 
-function meaningfulWords(text) {
-  return new Set(text.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !STOPWORDS.has(w)));
+// Non-examinable front/back matter Kuddus loves to pad the syllabus with.
+const JUNK_PATTERNS = [
+  /biograph/i, /\bindex\b/i, /barcode/i, /\bcover\b/i, /acknowledge?ment/i,
+  /publisher/i, /dedication/i, /\bpreface\b/i, /appendix/i, /glossary/i,
+  /\bisbn\b/i, /foreword/i, /\bblurb\b/i, /table of contents/i,
+  /author'?s? note/i, /copyright/i, /\bprice\b/i, /chapters?\s+\d+/i,
+];
+
+// Light singular stem so "acids"/"acid", "laws"/"law", "triangles"/"triangle"
+// all match — closes the most common plural gap without a real stemmer.
+function stem(w) {
+  if (w.length > 4 && w.endsWith("ies")) return w.slice(0, -3) + "y"; // properties -> property
+  if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1); // bases -> base, laws -> law
+  return w;
 }
 
-function wordSimilarity(a, b) {
-  const wa = meaningfulWords(a);
-  const wb = meaningfulWords(b);
-  if (wa.size === 0 || wb.size === 0) return 0;
-  let overlap = 0;
-  for (const w of wa) if (wb.has(w)) overlap++;
-  return overlap / (new Set([...wa, ...wb]).size || 1);
+function meaningfulWords(text) {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((w) => w.length > 2 && !STOPWORDS.has(w))
+      .map(stem)
+  );
+}
+
+function titleCase(s) {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function isJunk(text) {
+  return JUNK_PATTERNS.some((re) => re.test(text));
+}
+
+/** Recall of an official topic's words within a text: how much of the topic is present. */
+function topicCoverage(topic, textWords) {
+  const tw = [...meaningfulWords(topic)];
+  if (tw.length === 0) return 0;
+  let hit = 0;
+  for (const w of tw) if (textWords.has(w)) hit++;
+  return hit / tw.length;
+}
+
+function mentionsTopic(topic, lowerText, textWords) {
+  return lowerText.includes(topic.toLowerCase()) || topicCoverage(topic, textWords) >= 0.6;
 }
 
 function localSummarize(rawText, testDate) {
+  const lowerText = rawText.toLowerCase();
+  const textWords = meaningfulWords(rawText);
+
+  // 1) Keep every official curriculum topic clearly referenced in the text
+  //    (exact phrase OR ≥60% of the topic's words present).
+  const keptRaw = CURRICULUM_TOPICS.filter((t) => mentionsTopic(t, lowerText, textWords));
+  const keptTopics = keptRaw.map(titleCase);
+
+  // Every meaningful word belonging to a kept topic — used so that fragments of
+  // a kept topic (e.g. "triangles" from "Geometry: Angles and Triangles") are
+  // NOT mislabelled as junk.
+  const keptWords = new Set();
+  for (const t of keptRaw) for (const w of meaningfulWords(t)) keptWords.add(w);
+
+  // 2) Flag Kuddus's padding: a phrase is junk if it matches a known junk
+  //    pattern, or shares no words with any topic we decided to keep.
   const candidates = rawText
     .split(/[\n.;,]|(?:\band\b)|(?:\bincluding\b)/gi)
     .map((s) => s.trim())
     .filter((s) => s.length > 3);
 
-  const kept = [];
   const filteredOut = [];
-  for (const candidate of candidates) {
-    let best = 0;
-    let bestTopic = "";
-    for (const topic of CURRICULUM_TOPICS) {
-      const score = wordSimilarity(candidate, topic);
-      if (score > best) {
-        best = score;
-        bestTopic = topic;
+  const seen = new Set();
+  for (const c of candidates) {
+    const cWords = meaningfulWords(c);
+    const overlapsKept = [...cWords].some((w) => keptWords.has(w));
+    if (isJunk(c) || !overlapsKept) {
+      const key = c.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        filteredOut.push(c);
       }
     }
-    if (best >= 0.12) kept.push(bestTopic.replace(/\b\w/g, (c) => c.toUpperCase()));
-    else filteredOut.push(candidate);
   }
 
-  const uniqueKept = [...new Set(kept)];
   return {
     mode: "fallback",
-    keptTopics: uniqueKept,
+    keptTopics,
     filteredOut,
-    studyPlan: buildStudyPlan(uniqueKept, testDate),
+    studyPlan: buildStudyPlan(keptTopics, testDate),
   };
 }
 

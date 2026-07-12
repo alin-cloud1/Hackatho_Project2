@@ -1,7 +1,10 @@
 import http from "node:http";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
-import { config, ragEnabled } from "./config.js";
+import { config, ragEnabled, llmProvider } from "./config.js";
 import { assertDbConnection } from "./db.js";
 import { attachWebSocket } from "./realtime.js";
 
@@ -30,7 +33,23 @@ app.use("/api/syllabus", syllabusRoutes);
 app.use("/api/sos", sosRoutes);
 app.use("/api/factcheck", factcheckRoutes);
 
-// 404 + centralized error handler.
+// ---- Single-server mode ---------------------------------------------------
+// If the frontend has been built, serve its static bundle from this same
+// origin so the whole app runs on one port. `npm run build` at the repo root
+// produces frontend/dist; run `npm start` to build + serve here.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const clientDir = path.resolve(__dirname, "..", "..", "frontend", "dist");
+const serveClient = fs.existsSync(path.join(clientDir, "index.html"));
+
+if (serveClient) {
+  app.use(express.static(clientDir));
+  // SPA fallback: any non-API GET returns index.html so client-side routing works.
+  app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => {
+    res.sendFile(path.join(clientDir, "index.html"));
+  });
+}
+
+// 404 (unmatched /api routes) + centralized error handler.
 app.use((_req, res) => res.status(404).json({ error: "Not found." }));
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
@@ -44,8 +63,15 @@ attachWebSocket(server);
 async function start() {
   await assertDbConnection();
   server.listen(config.port, () => {
-    console.log(`Anti-Kuddus backend listening on http://localhost:${config.port}`);
-    console.log(`  RAG (Gemini) syllabus/fact-check: ${ragEnabled ? "ENABLED" : "disabled (local fallback)"}`);
+    const url = `http://localhost:${config.port}`;
+    if (serveClient) {
+      console.log(`Anti-Kuddus Protocol running (single server) on ${url}`);
+      console.log(`  Full app + API served from one origin — open ${url}`);
+    } else {
+      console.log(`Anti-Kuddus backend (API only) listening on ${url}`);
+      console.log(`  No frontend build found — run 'npm run build' to serve the app here too.`);
+    }
+    console.log(`  LLM/RAG syllabus + fact-check: ${ragEnabled ? `ENABLED via ${llmProvider}` : "disabled (local fallback)"}`);
     console.log(`  WebSocket SOS feed: ws://localhost:${config.port}/ws`);
   });
 }
