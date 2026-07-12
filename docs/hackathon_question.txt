@@ -1,0 +1,385 @@
+Hackathon Problem Statement
+|
+
+
+
+
+
+
+
+Hackathon Problem Statement: The Fall
+of Kodu Kuddus
+
+The Background Story
+
+In the peaceful realm of Class 7, Section B, a dark era has begun. Meet Kodu Kuddus, a boy
+whose ego is much larger than his academic capabilities. Kodu recently won the Class Captain
+election by promising free jhalmuri to everyone--a promise he conveniently forgot the
+moment the prestigious Captain's Badge was pinned to his shirt.
+
+When Rashid Sir, the strict but fair class teacher, handed over the responsibility, his
+instructions were crystal clear:
+
+        "Kuddus, you are the 1st Captain. But remember, this is a democracy. You must
+        consult your 2nd Captain (Biltu) and 3rd Captain (Miltu) before making any major
+        decisions."
+
+Kuddus nodded obediently, but in his head, he was already crowning himself the Emperor of
+Section B.
+
+The Reign of Terror
+
+Since taking power, Kodu Kuddus has turned the class into his personal dictatorship,
+completely ignoring Biltu and Miltu. His daily atrocities include:
+
+          The Doomsday Syllabus: Scheduling Class Tests on the day of major cricket finals.
+         For a simple 10-mark test, he assigns Chapters 1 to 7, including the writer's biography,
+         the index, and the barcode on the back cover.
+          The Selfish Sports Agenda: Using his veto power during PT period to arrange
+         "Ludu Tournaments" because he gasps for air after running for 30 seconds.
+          The Great Tiffin Heist: Enacting a 20% "Quality Control Tax" on highly desirable
+         tiffins like fried rice or sandwiches.
+          The Human Shield Seat Plan: Forcing the tallest boys to sit in the front row to
+         perfectly block the teacher's line of sight, allowing Kuddus to sleep peacefully in the
+         third row.
+          The Washroom Toll: Charging a 2-Taka bribe disguised as the "Class Welfare Fund"
+         for anyone needing a washroom break during free periods.
+
+                  10th Panel, BAIUST Computer Club
+                  Email: computerclub@baiust.ac.bd 
+                  Website: bcc.baiust.ac.bd
+|
+
+
+
+
+
+
+
+The Loophole
+
+The general students are exhausted, and Biltu and Miltu are incredibly frustrated. According
+to the school's ancient rulebook, captains cannot officially file complaints against other
+captains.
+
+However, a critical loophole exists: If the class teacher receives legitimate, anonymous
+complaints about the 1st Captain exactly three times from the general students, the captain
+gets two warnings, and on the third strike, Kuddus will be impeached immediately.
+
+Because the students are too terrified of Kuddus's retaliation, Biltu and Miltu need a
+technological revolution. They need you to build the "Anti-Kuddus Protocol"--a system to
+organize the students, track Kuddus's tyranny, and safely deliver the 3 strikes to Rashid Sir.
+
+The Hackathon Missions
+
+Participants can implement these features as standalone modules or combine them into a
+single ecosystem. Teams will be evaluated based on how far they progress from the baseline
+requirements into the advanced engineering challenges.
+
+Mission 1: The Anonymous Whistleblower (Strike Generator)
+
+Build a secure, anonymous portal where students can log Kuddus's daily atrocities.
+
+          Baseline Requirements:
+                    Create a secure login interface where students authenticate using a secret
+                   class roll-number mapping.
+                    A submission form allowing students to log complaints with categories (e.g.,
+                   Tiffin Theft, Bribes, Syllabus Bloat) and a text description.
+                    A central dashboard featuring a giant, dynamic visual progress bar showing:
+                   Warnings: X/3. Strikes left until Impeachment!.
+
+          Advanced Engineering:
+                    Absolute Anonymity Pipeline: Implement cryptographic masking or a
+                   zero-knowledge data pipeline ensuring that even if the database is leaked or
+                   accessed by Kuddus, individual roll numbers cannot be reverse-engineered or
+                   linked to specific complaints.
+                    Evidence Metadata Stripping: Support photo evidence uploads (e.g.,
+                   catching Kuddus mid-heist) but automatically strip EXIF metadata (timestamps,
+                   camera signatures) on upload to protect the whistleblower's identity.
+
+                  10th Panel, BAIUST Computer Club
+                  Email: computerclub@baiust.ac.bd 
+                  Website: bcc.baiust.ac.bd
+|
+
+
+
+
+
+
+
+Mission 2: The Anti-Camouflage Seat Planner
+
+Kuddus forces the tallest boys to sit in the front row so he can sleep in the back unseen. You
+need to build an algorithmic seating planner with a grid UI.
+
+          Baseline Requirements:
+                    Create an interface to input a list of student records containing Name, Roll
+                   Number, and Height (in cm).
+                    Render a static N x M classroom grid UI representing desks.
+                    A basic sorting mechanism that places students in ascending order of height
+                   from the front row to the back row.
+
+          Advanced Engineering:
+                    Line-of-Sight Optimization Algorithm: Create a seating program that
+                   calculates the best desk positions. It should ensure the teacher has a clear view
+                   of Kuddus's desk, accounting for the teacher's position and the height of
+                   students sitting in front.
+
+                    Dynamic Constraints Handling: Handle edge cases such as students with
+                   vision/hearing impairments who must sit in the front rows regardless of height,
+                   or row/column constraints of the physical classroom structure (e.g., center
+                   aisles).
+
+Mission 3: The Syllabus Negotiator (AI Integration)
+
+When Kuddus announces a monstrous syllabus, students panic. Build a tool that parses his
+ridiculous demands down to the essentials.
+
+          Baseline Requirements:
+                    An input field where students can paste Kuddus's long-form, terrifying
+                   syllabus statements.
+                    Integration with a LLM API (like OpenAI or Gemini) using a basic system
+                   prompt to summarize the text into a clean bulleted list of topics.
+
+          Advanced Engineering:
+                    Contextual RAG (Retrieval-Augmented Generation): Inject actual textbook
+                   chapter structures or past class questions into the AI context window. The
+                   system must cross-reference Kuddus's text against the official curriculum to
+                   filter out non-examinable garbage (like "the barcode on the back cover" or "the
+                   writer's biography").
+                    Smart Study Plan Generator: Output a highly structured, time-blocked
+                   JSON format that maps the filtered topics into a personalized, bite-sized study
+                   countdown schedule leading up to the test day.
+
+                  10th Panel, BAIUST Computer Club
+                  Email: computerclub@baiust.ac.bd 
+                  Website: bcc.baiust.ac.bd
+|
+
+
+
+
+
+
+
+Mission 4: The Corrupt Economy & Tiffin Ledger
+
+Track the illicit financial and caloric wealth Kuddus is accumulating through the 2-Taka
+washroom tax and the 20% tiffin extortion.
+
+          Baseline Requirements:
+                    A digital ledger system where students anonymously log instances of forced
+                   payments (2 Taka) or stolen food items.
+                    Standard data visualization showing total cash extorted and total food items
+                   collected over time.
+
+          Advanced Engineering:
+                    The Caloric vs. Kinetic Disparity Engine: Implement a tracking model that
+                   calculates Kuddus's estimated caloric intake from the stolen food database
+                   versus his active energy expenditure (modeled mathematically as zero due to
+                   his indoor Ludu lifestyle).
+                    Projected Weaponry Conversions: Convert his total extorted cash reserves
+                   in real time into relatable metrics, dynamically displaying how many
+                   international-standard cricket bats or packets of premium jhalmuri he could
+                   illegally fund with his corrupt capital.
+
+Mission 5: The SOS Rescue Flare
+
+When Kuddus corners a student in the school corridors to demand a bribe or steal a
+sandwich, the student needs immediate backup.
+
+          Baseline Requirements:
+                    A prominent, mobile-friendly "SOS" button on the UI.
+                    When clicked, the user selects their current location from a hardcoded
+                   dropdown menu (e.g., Library, Playground, Corridor, Classroom, Canteen).
+                    Updates an active dashboard view for the 2nd and 3rd Captains showing the
+                   distress signal.
+
+          Advanced Engineering:
+                    Real-Time Event Broadcast: Implement a low-latency socket layer (e.g.,
+                   WebSockets or gRPC) or a robust Web Push Notification system that instantly
+                   flashes a critical alert window onto the active screens of Biltu and Miltu's
+                   devices within milliseconds of the button press, bypassing standard page
+                   refreshes.
+                    Simulated Network Resilience: - Implement a caching system that stores
+                   SOS alerts while offline and automatically syncs them to the server as soon as
+                   the network is active.
+
+                  10th Panel, BAIUST Computer Club
+                  Email: computerclub@baiust.ac.bd 
+                  Website: bcc.baiust.ac.bd
+|
+
+
+
+
+
+
+
+Mission 6: The Kuddus Fact-Checker
+
+Kuddus frequently makes up fake school rules to maintain power (e.g., "The Headmaster said
+1st Captains don't have to do homework"), and students need to debunk his lies instantly.
+
+          Baseline Requirements:
+                    A search input interface where students can type a claim made by Kuddus.
+                    A basic string-matching system that queries a pre-seeded database table of
+                   official school guidelines and returns matching rules.
+
+          Advanced Engineering:
+                    Semantic Fact-Checking Engine: Utilize embedding models to perform a
+                   semantic search against an unstructured document layout representing the
+                   "Official School Rulebook".
+                    Confidence Scoring: The system must process the natural language claim,
+                   locate the relevant regulatory section, and output a definitive, styled validation
+                   card containing:
+                              A bold status: [TRUE] or [FALSE]
+                              A confidence score metric
+                              An exact quote of the real rule to debunk the claim on the spot.
+
+                  10th Panel, BAIUST Computer Club
+                  Email: computerclub@baiust.ac.bd 
+                  Website: bcc.baiust.ac.bd
+|
+
+
+
+
+
+
+
+Anti-Kuddus Protocol: Submission Checklist & Feature
+Matrix
+
+   Deliverable                         Juniors   Seniors    Format / Technical Notes
+                                      (1st-2nd)  (3rd-4th)
+
+   M1: Anonymous                      Required   Required   Roll-number auth login, text
+   Strike Portal &                                          complaint form, and dynamic
+   Dashboard                                                progress bar UI (Warnings: X/3).
+
+   M1: Cryptographic                                        One-way data pipeline to prevent
+   Masking & EXIF
+   Stripper                              Not                reverse-engineering       roll
+                                      Required
+   M2: Height-Sorted                             Required   numbers + programmatic
+   Classroom Grid UI
+                                                            metadata stripping on photo
+   M2: Line-of-Sight &
+   Constraint                                               uploads.
+   Algorithm
+                                      Required   Required   Student records input (Name,
+   M3: Syllabus                                             Roll, Height) mapped into an
+   Summarizer (LLM                                          interactive $N \times M$
+   API)                                                     classroom desk layout sorted
+                                                            front-to-back.
+   M3: Contextual RAG
+   & JSON Study                          Not     Required   Algorithmic calculation verifying
+   Planner                            Required              an unobstructed view from the
+                                                            teacher's podium to Kuddus,
+                                                            adapting to aisle layouts and
+                                                            impairment exceptions.
+
+                                      Required   Required   An interface that uses an LLM to
+                                                            summarize long syllabus into
+                                                            bullet points.
+
+                                         Not     Required   Vector embedding search using
+                                      Required              actual textbook/past exam
+                                                            context to weed out fluff,
+                                                            generating a structured JSON
+                                                            countdown schedule.
+
+   10th Panel, BAIUST Computer Club
+   Email: computerclub@baiust.ac.bd 
+   Website: bcc.baiust.ac.bd
+|
+
+
+
+
+
+
+
+   M4: Corrupt                        Required  Required  Anonymous database logging
+   Economy Ledger &                                       the 2-Taka washroom toll and
+   Data Charts                                            stolen tiffins, rendering basic
+                                                          visual data graphs over time.
+
+   M4: Caloric Disparity                 Not    Required  Analytical model tracking
+   & Currency                         Required            Kuddus's caloric intake vs. zero
+   Converter                                              kinetic output, translating
+                                                          extorted funds into cricket bat
+                                                          values in real time.
+
+   M5: SOS Dropdown                   Required  Required  Mobile-responsive panic button
+   Trigger & Basic View                                   utilizing a hardcoded school
+                                                          location dropdown to alert a
+                                                          central captain dashboard.
+
+   M5: Real-Time                         Not    Required  WebSockets, gRPC, or Web Push
+   Socket Broadcast &                 Required            layer for millisecond alert
+   Sync Cache                                             delivery alongside an offline
+                                                          storage queue that auto-syncs
+                                                          when reconnected.
+
+   M6: Rulebook                       Required  Required  Text search input querying exact
+   String-Matching                                        string combinations against a
+   Search                                                 pre-seeded relational database
+                                                          table of school rules.
+
+                                                          Unstructured         semantic
+
+   M6: Semantic                                           embedding search returning
+   Fact-Checking &
+   Validation Card                       Not    Required  dynamic, styled validation cards
+                                      Required
+                                                          with a bold [TRUE] / [FALSE]
+
+                                                          badge, confidence score, and
+
+                                                          raw rule quote.
+
+                                                          Step-by-step local setup
+
+   README.md                                              instructions,        framework
+   Documentation
+                                      Required  Required  architecture         description,
+
+                                                          architectural trade-offs, and UI
+
+                                                          layout screenshots.
+
+   10th Panel, BAIUST Computer Club
+   Email: computerclub@baiust.ac.bd 
+   Website: bcc.baiust.ac.bd
+|
+
+
+
+
+
+
+
+                                                          Public or private GitHub
+
+   Codebase & Video                                       repository access along with a
+   Demonstration
+   Artifacts                          Required  Required  recorded        Loom  video
+
+                                                          walkthrough highlighting your
+
+                                                          core features.
+
+    Pro Tip from Biltu & Miltu: "Do not let Kuddus catch you pushing your
+
+   environment variables or raw LLM cloud API keys to public GitHub repositories.
+   Keep your configurations safely hidden inside a .env file from Hour 0, or Rashid
+   Sir will hand your team a swift disqualification before the impeachment process
+   even begins!"
+
+   10th Panel, BAIUST Computer Club
+   Email: computerclub@baiust.ac.bd 
+   Website: bcc.baiust.ac.bd
+

@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink-950: #07090f;
+  --color-ink-900: #0b0e17;
+  --color-ink-850: #10141f;
+  --color-ink-800: #151a28;
+  --color-ink-700: #1d2436;
+  --color-ink-600: #2a3350;
+  --color-ink-500: #3d4972;
+  --color-ink-400: #5b6a9c;
+  --color-ink-300: #8b97c2;
+  --color-ink-200: #c1c9e6;
+  --color-ink-100: #e7eaf7;
+
+  --color-signal-500: #ff4d4f;
+  --color-signal-400: #ff7a7c;
+  --color-signal-300: #ffb3b4;
+
+  --color-alert-500: #ffb020;
+  --color-alert-400: #ffc85c;
+
+  --color-mint-500: #2de0a8;
+  --color-mint-400: #6cf0c6;
+
+  --color-electric-500: #4d7fff;
+  --color-electric-400: #7ea2ff;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(77, 127, 255, 0.15), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(255, 77, 79, 0.1), transparent);
+  min-height: 100vh;
+}
+
+::selection {
+  background-color: var(--color-signal-500);
+  color: var(--color-ink-950);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink-900);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-600);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-500);
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.55); }
+  70% { box-shadow: 0 0 0 16px rgba(255, 77, 79, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0); }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
+}
