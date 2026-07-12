@@ -1,91 +1,120 @@
-import { useEffect, useState } from "react";
-import { Siren, MapPin, WifiOff, Wifi, CheckCircle2, Radio } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Siren, MapPin, WifiOff, Wifi, CheckCircle2, Radio, ShieldAlert } from "lucide-react";
 import { useAppState } from "../state/AppStateContext";
-import type { SosAlert, SosLocation } from "../types";
+import type { SosLocation } from "../types";
 import { Badge, Button, Card, Field, PageHeader, inputClass } from "../components/ui";
 
 const LOCATIONS: SosLocation[] = ["Library", "Playground", "Corridor", "Classroom", "Canteen"];
 
 export function SosFlare() {
-  const { sosAlerts, addSosAlert, updateSosAlert, isOnline } = useAppState();
+  const { sosAlerts, addSosAlert, updateSosAlert, isOnline, isStudent, isAdmin } = useAppState();
   const [location, setLocation] = useState<SosLocation>("Corridor");
   const [simulateOffline, setSimulateOffline] = useState(false);
   const [justSent, setJustSent] = useState(false);
+  // Locations captured while offline, waiting to POST to the server on reconnect.
+  const [pendingQueue, setPendingQueue] = useState<SosLocation[]>([]);
+  const syncing = useRef(false);
 
   const effectivelyOnline = isOnline && !simulateOffline;
 
   // Auto-sync queued alerts the moment connectivity returns.
   useEffect(() => {
-    if (!effectivelyOnline) return;
-    const queued = sosAlerts.filter((a) => a.status === "queued");
-    queued.forEach((a) => updateSosAlert(a.id, "sent"));
-  }, [effectivelyOnline, sosAlerts, updateSosAlert]);
+    if (!effectivelyOnline || pendingQueue.length === 0 || syncing.current) return;
+    syncing.current = true;
+    (async () => {
+      const queue = [...pendingQueue];
+      for (const loc of queue) {
+        await addSosAlert(loc, "sent");
+      }
+      setPendingQueue([]);
+      syncing.current = false;
+    })();
+  }, [effectivelyOnline, pendingQueue, addSosAlert]);
 
   const handleSos = () => {
-    const alert: SosAlert = {
-      id: crypto.randomUUID(),
-      location,
-      timestamp: Date.now(),
-      status: effectivelyOnline ? "sent" : "queued",
-    };
-    addSosAlert(alert);
+    if (!isStudent) return; // SOS is a student-only panic action
+    if (effectivelyOnline) {
+      addSosAlert(location, "sent");
+    } else {
+      // Offline: cache locally and flush automatically when the network returns.
+      setPendingQueue((q) => [...q, location]);
+    }
     setJustSent(true);
     setTimeout(() => setJustSent(false), 2000);
   };
 
-  const queuedCount = sosAlerts.filter((a) => a.status === "queued").length;
+  const queuedCount = pendingQueue.length;
 
   return (
     <div>
       <PageHeader
         eyebrow="Mission 5"
         title="SOS Rescue Flare"
-        description="One tap alerts Biltu and Miltu's live dashboard the instant Kuddus corners you in the corridor."
+        description={
+          isAdmin
+            ? "Monitor students' distress signals in real time. The SOS button is for general students only — admins respond, they don't trigger."
+            : "One tap alerts Biltu and Miltu's live dashboard the instant Kuddus corners you in the corridor."
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6">
-          <Card className="flex flex-col items-center gap-5 p-8 text-center">
-            <Field label="Current Location">
-              <select
-                className={inputClass}
-                value={location}
-                onChange={(e) => setLocation(e.target.value as SosLocation)}
+          {isStudent && (
+            <Card className="flex flex-col items-center gap-5 p-8 text-center">
+              <Field label="Current Location">
+                <select
+                  className={inputClass}
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value as SosLocation)}
+                >
+                  {LOCATIONS.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <button
+                onClick={handleSos}
+                className="group relative flex h-40 w-40 items-center justify-center rounded-full bg-signal-500 shadow-2xl shadow-signal-500/40 transition-transform active:scale-95"
               >
-                {LOCATIONS.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </Field>
+                <span className="absolute inset-0 rounded-full bg-signal-500 animate-pulse-ring" />
+                <span className="relative flex flex-col items-center gap-1 text-white">
+                  <Siren className="h-9 w-9" />
+                  <span className="font-display text-lg font-extrabold tracking-wide">SOS</span>
+                </span>
+              </button>
 
-            <button
-              onClick={handleSos}
-              className="group relative flex h-40 w-40 items-center justify-center rounded-full bg-signal-500 shadow-2xl shadow-signal-500/40 transition-transform active:scale-95"
-            >
-              <span className="absolute inset-0 rounded-full bg-signal-500 animate-pulse-ring" />
-              <span className="relative flex flex-col items-center gap-1 text-white">
-                <Siren className="h-9 w-9" />
-                <span className="font-display text-lg font-extrabold tracking-wide">SOS</span>
-              </span>
-            </button>
+              {justSent && (
+                <p className="flex items-center gap-2 text-xs font-medium text-mint-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {effectivelyOnline ? "Alert broadcast to captains." : "Alert queued — will sync when back online."}
+                </p>
+              )}
 
-            {justSent && (
-              <p className="flex items-center gap-2 text-xs font-medium text-mint-400">
-                <CheckCircle2 className="h-4 w-4" />
-                {effectivelyOnline ? "Alert broadcast to captains." : "Alert queued — will sync when back online."}
+              <button
+                onClick={() => setSimulateOffline((v) => !v)}
+                className="flex items-center gap-1.5 text-[11px] text-ink-500 hover:text-ink-300"
+              >
+                {simulateOffline ? <WifiOff className="h-3 w-3" /> : <Wifi className="h-3 w-3" />}
+                {simulateOffline ? "Simulating offline — tap to reconnect" : "Simulate offline mode"}
+              </button>
+            </Card>
+          )}
+
+          {isAdmin && (
+            <Card className="flex flex-col items-center gap-3 p-8 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-electric-500/30 bg-electric-500/10">
+                <ShieldAlert className="h-7 w-7 text-electric-400" />
+              </div>
+              <h3 className="font-display text-sm font-bold text-ink-100">Admin Response Console</h3>
+              <p className="text-xs leading-relaxed text-ink-400">
+                Only general students can raise an SOS — they're the ones Kuddus corners. As an
+                admin you monitor incoming alerts and acknowledge them here and on the dashboard.
               </p>
-            )}
-
-            <button
-              onClick={() => setSimulateOffline((v) => !v)}
-              className="flex items-center gap-1.5 text-[11px] text-ink-500 hover:text-ink-300"
-            >
-              {simulateOffline ? <WifiOff className="h-3 w-3" /> : <Wifi className="h-3 w-3" />}
-              {simulateOffline ? "Simulating offline — tap to reconnect" : "Simulate offline mode"}
-            </button>
-          </Card>
+            </Card>
+          )}
 
           <Card className="p-6">
             <h3 className="mb-2 font-display text-sm font-bold text-ink-100">
@@ -151,7 +180,7 @@ export function SosFlare() {
                       {a.status}
                     </Badge>
                     {a.status !== "acknowledged" && (
-                      <Button variant="ghost" onClick={() => updateSosAlert(a.id, "acknowledged")}>
+                      <Button variant="ghost" onClick={() => updateSosAlert(a.id)}>
                         Acknowledge
                       </Button>
                     )}

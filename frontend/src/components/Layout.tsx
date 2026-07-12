@@ -25,17 +25,17 @@ type NavItem = {
   label: string;
   icon: typeof LayoutDashboard;
   end?: boolean;
-  adminOnly?: boolean;
+  roles?: Role[]; // omitted = visible to every role
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, adminOnly: true },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, roles: ["admin"] },
   { to: "/whistleblower", label: "M1 · Whistleblower", icon: MessageSquareWarning },
   { to: "/seating", label: "M2 · Seat Planner", icon: Grid3x3 },
-  { to: "/syllabus", label: "M3 · Syllabus Negotiator", icon: BookOpenText },
-  { to: "/ledger", label: "M4 · Corrupt Economy", icon: Coins },
+  { to: "/syllabus", label: "M3 · Syllabus Negotiator", icon: BookOpenText, roles: ["student"] },
+  { to: "/ledger", label: "M4 · Corrupt Economy", icon: Coins, roles: ["student"] },
   { to: "/sos", label: "M5 · SOS Flare", icon: Siren },
-  { to: "/fact-check", label: "M6 · Fact-Checker", icon: ShieldCheck },
+  { to: "/fact-check", label: "M6 · Fact-Checker", icon: ShieldCheck, roles: ["student"] },
 ];
 
 const ROLE_LABEL: Record<Role, string> = { admin: "Admin", student: "Student" };
@@ -44,7 +44,8 @@ export function Layout() {
   const { currentStudent, logout, isOnline, strikeCount, isAdmin } = useAppState();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const role = currentStudent?.role;
+  const navItems = NAV_ITEMS.filter((item) => !item.roles || (role && item.roles.includes(role)));
 
   const handleLogout = () => {
     logout();

@@ -1,0 +1,23 @@
+{
+  "name": "anti-kuddus-backend",
+  "version": "1.0.0",
+  "description": "Anti-Kuddus Protocol backend — Node.js + Express + PostgreSQL API for the Class 7-B resistance.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "db:setup": "node scripts/setup-db.js",
+    "db:seed": "node scripts/seed-db.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "ws": "^8.18.0"
+  }
+}

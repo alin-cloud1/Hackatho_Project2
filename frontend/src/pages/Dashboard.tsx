@@ -1,23 +1,15 @@
 import { Link } from "react-router-dom";
-import {
-  MessageSquareWarning,
-  Grid3x3,
-  BookOpenText,
-  Coins,
-  Siren,
-  ShieldCheck,
-  ArrowUpRight,
-  MapPin,
-} from "lucide-react";
+import { MessageSquareWarning, Grid3x3, Siren, ArrowUpRight, MapPin } from "lucide-react";
 import { useAppState } from "../state/AppStateContext";
 import { StrikeMeter } from "../components/StrikeMeter";
 import { Badge, Button, Card, PageHeader } from "../components/ui";
 
+// Admins oversee from the command center — only the surfaces they can open.
 const MISSIONS = [
   {
     to: "/whistleblower",
-    title: "Whistleblower Portal",
-    desc: "File anonymous, cryptographically-masked complaints.",
+    title: "Complaint Oversight",
+    desc: "Review every anonymous strike against Kuddus.",
     icon: MessageSquareWarning,
     tone: "text-signal-400 bg-signal-500/10 border-signal-500/20",
   },
@@ -29,32 +21,11 @@ const MISSIONS = [
     tone: "text-electric-400 bg-electric-500/10 border-electric-500/20",
   },
   {
-    to: "/syllabus",
-    title: "Syllabus Negotiator",
-    desc: "RAG-filtered summaries + JSON study plans.",
-    icon: BookOpenText,
-    tone: "text-mint-400 bg-mint-500/10 border-mint-500/20",
-  },
-  {
-    to: "/ledger",
-    title: "Corrupt Economy Ledger",
-    desc: "Track extorted cash and stolen tiffins.",
-    icon: Coins,
-    tone: "text-alert-400 bg-alert-500/10 border-alert-500/20",
-  },
-  {
     to: "/sos",
-    title: "SOS Rescue Flare",
-    desc: "Real-time distress broadcast to captains.",
+    title: "SOS Response",
+    desc: "Monitor and acknowledge students' distress signals.",
     icon: Siren,
     tone: "text-signal-400 bg-signal-500/10 border-signal-500/20",
-  },
-  {
-    to: "/fact-check",
-    title: "Fact-Checker",
-    desc: "Debunk Kuddus's fabricated rules instantly.",
-    icon: ShieldCheck,
-    tone: "text-electric-400 bg-electric-500/10 border-electric-500/20",
   },
 ];
 
@@ -130,7 +101,7 @@ export function Dashboard() {
                   {a.status}
                 </Badge>
                 {a.status !== "acknowledged" && (
-                  <Button variant="ghost" onClick={() => updateSosAlert(a.id, "acknowledged")}>
+                  <Button variant="ghost" onClick={() => updateSosAlert(a.id)}>
                     Acknowledge
                   </Button>
                 )}

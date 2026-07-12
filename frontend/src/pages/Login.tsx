@@ -11,10 +11,14 @@ export function Login() {
   const [rollNumber, setRollNumber] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const result = login(rollNumber.trim(), pin.trim());
+    setSubmitting(true);
+    setError(null);
+    const result = await login(rollNumber.trim(), pin.trim());
+    setSubmitting(false);
     if (result.ok) {
       navigate("/");
     } else {
@@ -71,8 +75,12 @@ export function Login() {
             </p>
           )}
 
-          <Button type="submit" className="w-full">
-            Enter the Resistance <ArrowRight className="h-4 w-4" />
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? "Authenticating…" : (
+              <>
+                Enter the Resistance <ArrowRight className="h-4 w-4" />
+              </>
+            )}
           </Button>
 
           <p className="text-center text-[11px] leading-relaxed text-ink-500">

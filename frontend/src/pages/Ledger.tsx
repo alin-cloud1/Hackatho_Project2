@@ -28,7 +28,7 @@ export function Ledger() {
   const totalCalories = ledger.filter((e) => e.kind === "food").reduce((s, e) => s + e.calories, 0);
   const foodCount = ledger.filter((e) => e.kind === "food").length;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (kind === "toll") {
       const taka = Number(amount);
@@ -37,24 +37,11 @@ export function Ledger() {
         return;
       }
       setAmountError(null);
-      addLedgerEntry({
-        id: crypto.randomUUID(),
-        kind: "toll",
-        label: `Cash Extorted (${taka} Tk)`,
-        amountTaka: Math.round(taka),
-        calories: 0,
-        timestamp: Date.now(),
-      });
-      setAmount("2");
+      const res = await addLedgerEntry({ kind: "toll", amountTaka: Math.round(taka) });
+      if (!res.ok) setAmountError(res.error ?? "Failed to log entry.");
+      else setAmount("2");
     } else {
-      addLedgerEntry({
-        id: crypto.randomUUID(),
-        kind: "food",
-        label: foodItem,
-        amountTaka: 0,
-        calories: CALORIE_TABLE[foodItem],
-        timestamp: Date.now(),
-      });
+      await addLedgerEntry({ kind: "food", foodItem });
     }
   };
 

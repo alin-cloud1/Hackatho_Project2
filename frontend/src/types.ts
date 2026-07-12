@@ -51,6 +51,20 @@ export interface SeatAssignment {
   student: Student | null;
 }
 
+/** Seating plan returned by the backend (matches src/lib/seatPlanner.js output). */
+export interface SeatPlan {
+  grid: SeatAssignment[][];
+  rows: number;
+  cols: number;
+  kuddusSeat: { row: number; col: number } | null;
+  kuddusCol: number | null;
+  blockedBy: SeatId[];
+  accessibilitySeats: SeatId[];
+  lineOfSightClear: boolean;
+  unseated: Student[];
+  notes: string[];
+}
+
 export interface LedgerEntry {
   id: string;
   kind: "toll" | "food";

@@ -1,131 +1,236 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { Complaint, LedgerEntry, SeatProfile, SosAlert, Student } from "../types";
-import { ROSTER } from "../data/mockData";
+import type { Complaint, ComplaintCategory, LedgerEntry, SeatProfile, SosAlert, Student } from "../types";
+import { api, getToken, setToken, openSosSocket, type LedgerTotals } from "../lib/api";
 
-const STORAGE_KEY = "akp_state_v2";
-const SESSION_KEY = "akp_session_v2";
+const EMPTY_TOTALS: LedgerTotals = {
+  totalCash: 0,
+  totalCalories: 0,
+  foodCount: 0,
+  entryCount: 0,
+  cricketBats: 0,
+  jhalmuriPackets: 0,
+};
 
-interface PersistedState {
-  complaints: Complaint[];
-  ledger: LedgerEntry[];
-  sosAlerts: SosAlert[];
-  seatProfiles: Record<string, SeatProfile>; // keyed by roll number
-}
-
-interface AppState extends PersistedState {
+interface AppState {
   currentStudent: Student | null;
   isAdmin: boolean;
   isStudent: boolean;
   isOnline: boolean;
-  login: (rollNumber: string, pin: string) => { ok: boolean; error?: string };
-  logout: () => void;
-  addComplaint: (c: Complaint) => void;
-  addLedgerEntry: (e: LedgerEntry) => void;
-  addSosAlert: (a: SosAlert) => void;
-  updateSosAlert: (id: string, status: SosAlert["status"]) => void;
-  setSeatProfile: (rollNumber: string, profile: SeatProfile) => void;
+  loading: boolean;
+  complaints: Complaint[];
   strikeCount: number;
+  ledger: LedgerEntry[];
+  ledgerTotals: LedgerTotals;
+  sosAlerts: SosAlert[];
+  login: (rollNumber: string, pin: string) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => void;
+  addComplaint: (payload: {
+    category: ComplaintCategory;
+    description: string;
+    hasPhoto: boolean;
+    photoStrippedMeta: boolean;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  addLedgerEntry: (
+    payload: { kind: "toll"; amountTaka: number } | { kind: "food"; foodItem: string }
+  ) => Promise<{ ok: boolean; error?: string }>;
+  addSosAlert: (location: string, status: "queued" | "sent") => Promise<{ ok: boolean; error?: string }>;
+  updateSosAlert: (id: string) => Promise<void>;
+  setSeatProfile: (rollNumber: string, profile: SeatProfile) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const AppStateContext = createContext<AppState | null>(null);
 
-function loadPersisted(): PersistedState {
-  const fallback: PersistedState = { complaints: [], ledger: [], sosAlerts: [], seatProfiles: {} };
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...fallback, ...JSON.parse(raw) };
-  } catch {
-    // ignore corrupt storage
-  }
-  return fallback;
-}
-
-function loadSession(): Student | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [persisted, setPersisted] = useState<PersistedState>(loadPersisted);
-  const [currentStudent, setCurrentStudent] = useState<Student | null>(loadSession);
+  const [currentStudent, setCurrentStudent] = useState<Student | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [strikeCount, setStrikeCount] = useState(0);
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [ledgerTotals, setLedgerTotals] = useState<LedgerTotals>(EMPTY_TOTALS);
+  const [sosAlerts, setSosAlerts] = useState<SosAlert[]>([]);
+
+  const socketRef = useRef<WebSocket | null>(null);
+
+  const role = currentStudent?.role;
+
+  // ---- data loading ----
+  const loadComplaints = useCallback(async () => {
+    const res = await api.getComplaints();
+    setComplaints(res.complaints);
+    setStrikeCount(res.strikeCount ?? 0);
+  }, []);
+
+  const loadLedger = useCallback(async () => {
+    const res = await api.getLedger();
+    setLedger(res.entries);
+    setLedgerTotals(res.totals);
+  }, []);
+
+  const loadSos = useCallback(async () => {
+    const res = await api.getSos();
+    setSosAlerts(res.alerts);
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    await Promise.all([loadComplaints(), loadLedger(), loadSos()]);
+  }, [loadComplaints, loadLedger, loadSos]);
+
+  // ---- realtime SOS feed ----
+  const connectSocket = useCallback(() => {
+    socketRef.current?.close();
+    const ws = openSosSocket();
+    if (!ws) return;
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === "sos:new") {
+          setSosAlerts((prev) => [msg.alert, ...prev.filter((a) => a.id !== msg.alert.id)]);
+        } else if (msg.type === "sos:update") {
+          setSosAlerts((prev) => prev.map((a) => (a.id === msg.alert.id ? msg.alert : a)));
+        }
+      } catch {
+        // ignore malformed frames
+      }
+    };
+    socketRef.current = ws;
+  }, []);
+
+  // ---- session restore on mount ----
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
-  }, [persisted]);
+    let active = true;
+    (async () => {
+      if (!getToken()) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const { student } = await api.me();
+        if (!active) return;
+        setCurrentStudent(student);
+        await loadAll();
+        connectSocket();
+      } catch {
+        setToken(null); // stale/invalid token
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+      socketRef.current?.close();
+    };
+  }, [loadAll, connectSocket]);
 
   useEffect(() => {
-    const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
     return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
     };
   }, []);
 
-  const login = useCallback((rollNumber: string, pin: string) => {
-    const student = ROSTER.find((s) => s.rollNumber === rollNumber);
-    if (!student) return { ok: false, error: "Roll number not recognized." };
-    // Kuddus's access has been revoked by class decree — he can never log in.
-    if (student.isKuddus || !student.pin || !student.role) {
-      return { ok: false, error: "This account has been revoked. Access denied by class decree." };
-    }
-    if (student.pin !== pin) return { ok: false, error: "Incorrect secret PIN." };
-    setCurrentStudent(student);
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(student));
-    return { ok: true };
-  }, []);
+  // ---- actions ----
+  const login = useCallback(
+    async (rollNumber: string, pin: string) => {
+      try {
+        const { token, student } = await api.login(rollNumber, pin);
+        setToken(token);
+        setCurrentStudent(student);
+        await loadAll();
+        connectSocket();
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "Login failed." };
+      }
+    },
+    [loadAll, connectSocket]
+  );
 
   const logout = useCallback(() => {
+    setToken(null);
     setCurrentStudent(null);
-    sessionStorage.removeItem(SESSION_KEY);
+    setComplaints([]);
+    setLedger([]);
+    setLedgerTotals(EMPTY_TOTALS);
+    setSosAlerts([]);
+    setStrikeCount(0);
+    socketRef.current?.close();
+    socketRef.current = null;
   }, []);
 
-  const addComplaint = useCallback((c: Complaint) => {
-    setPersisted((prev) => ({ ...prev, complaints: [c, ...prev.complaints] }));
+  const addComplaint = useCallback(
+    async (payload: { category: ComplaintCategory; description: string; hasPhoto: boolean; photoStrippedMeta: boolean }) => {
+      try {
+        await api.addComplaint(payload);
+        await loadComplaints();
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to file complaint." };
+      }
+    },
+    [loadComplaints]
+  );
+
+  const addLedgerEntry = useCallback(
+    async (payload: { kind: "toll"; amountTaka: number } | { kind: "food"; foodItem: string }) => {
+      try {
+        const res = await api.addLedgerEntry(payload);
+        setLedger((prev) => [res.entry, ...prev]);
+        setLedgerTotals(res.totals);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to log entry." };
+      }
+    },
+    []
+  );
+
+  const addSosAlert = useCallback(async (location: string, status: "queued" | "sent") => {
+    try {
+      const res = await api.addSos(location, status);
+      setSosAlerts((prev) => [res.alert, ...prev.filter((a) => a.id !== res.alert.id)]);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Failed to send SOS." };
+    }
   }, []);
 
-  const addLedgerEntry = useCallback((e: LedgerEntry) => {
-    setPersisted((prev) => ({ ...prev, ledger: [e, ...prev.ledger] }));
+  const updateSosAlert = useCallback(async (id: string) => {
+    try {
+      const res = await api.ackSos(id);
+      setSosAlerts((prev) => prev.map((a) => (a.id === id ? res.alert : a)));
+    } catch {
+      // ignore
+    }
   }, []);
 
-  const addSosAlert = useCallback((a: SosAlert) => {
-    setPersisted((prev) => ({ ...prev, sosAlerts: [a, ...prev.sosAlerts] }));
+  const setSeatProfile = useCallback(async (_rollNumber: string, profile: SeatProfile) => {
+    try {
+      await api.setSeatProfile(profile);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Failed to save seat details." };
+    }
   }, []);
-
-  const updateSosAlert = useCallback((id: string, status: SosAlert["status"]) => {
-    setPersisted((prev) => ({
-      ...prev,
-      sosAlerts: prev.sosAlerts.map((a) => (a.id === id ? { ...a, status } : a)),
-    }));
-  }, []);
-
-  const setSeatProfile = useCallback((rollNumber: string, profile: SeatProfile) => {
-    setPersisted((prev) => ({
-      ...prev,
-      seatProfiles: { ...prev.seatProfiles, [rollNumber]: profile },
-    }));
-  }, []);
-
-  const strikeCount = Math.min(3, persisted.complaints.length);
-  const isAdmin = currentStudent?.role === "admin";
-  const isStudent = currentStudent?.role === "student";
 
   const value = useMemo<AppState>(
     () => ({
-      ...persisted,
       currentStudent,
-      isAdmin,
-      isStudent,
+      isAdmin: role === "admin",
+      isStudent: role === "student",
       isOnline,
+      loading,
+      complaints,
+      strikeCount,
+      ledger,
+      ledgerTotals,
+      sosAlerts,
       login,
       logout,
       addComplaint,
@@ -133,9 +238,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addSosAlert,
       updateSosAlert,
       setSeatProfile,
-      strikeCount,
     }),
-    [persisted, currentStudent, isAdmin, isStudent, isOnline, login, logout, addComplaint, addLedgerEntry, addSosAlert, updateSosAlert, setSeatProfile, strikeCount]
+    [currentStudent, role, isOnline, loading, complaints, strikeCount, ledger, ledgerTotals, sosAlerts, login, logout, addComplaint, addLedgerEntry, addSosAlert, updateSosAlert, setSeatProfile]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

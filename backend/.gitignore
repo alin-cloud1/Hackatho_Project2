@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+
+# SQLite database files (regenerate with npm run db:setup && npm run db:seed)
+data/
+

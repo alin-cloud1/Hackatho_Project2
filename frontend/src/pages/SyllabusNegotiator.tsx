@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Sparkles, ListChecks, Trash2, CalendarClock } from "lucide-react";
-import { summarizeSyllabus } from "../lib/llm";
+import { api } from "../lib/api";
 import type { SyllabusResult } from "../types";
 import { Badge, Button, Card, Field, PageHeader, inputClass } from "../components/ui";
 
@@ -16,15 +16,22 @@ export function SyllabusNegotiator() {
   });
   const [result, setResult] = useState<SyllabusResult | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<string | null>(null);
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (!rawText.trim()) return;
     setProcessing(true);
-    // simulated latency to make the "AI pass" legible in the demo
-    setTimeout(() => {
-      setResult(summarizeSyllabus(rawText, testDate));
+    setError(null);
+    try {
+      const res = await api.summarizeSyllabus(rawText, testDate);
+      setResult(res);
+      setMode(res.mode);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed.");
+    } finally {
       setProcessing(false);
-    }, 500);
+    }
   };
 
   return (
@@ -66,6 +73,11 @@ export function SyllabusNegotiator() {
                 </Button>
               </div>
             </div>
+            {error && (
+              <p className="mt-3 rounded-lg border border-signal-500/30 bg-signal-500/10 px-3 py-2 text-xs font-medium text-signal-400">
+                {error}
+              </p>
+            )}
           </Card>
 
           <Card className="p-6">
@@ -80,10 +92,16 @@ export function SyllabusNegotiator() {
               instead of reaching the study plan.
             </p>
             <p className="mt-2 text-[11px] text-ink-500">
-              This runs as a local heuristic for the frontend demo. Swap{" "}
-              <code className="rounded bg-ink-900 px-1 py-0.5">src/lib/llm.ts</code> for a real
-              LLM/embedding API call once the backend is wired up — the function signature stays
-              the same.
+              This calls the backend RAG service. With a{" "}
+              <code className="rounded bg-ink-900 px-1 py-0.5">GEMINI_API_KEY</code> set, it uses
+              real embeddings + generation (Google Gemini free tier); otherwise it falls back to a
+              local keyword filter.
+              {mode && (
+                <>
+                  {" "}
+                  Last run: <span className="font-semibold text-ink-300">{mode === "rag" ? "Gemini RAG" : "local fallback"}</span>.
+                </>
+              )}
             </p>
           </Card>
         </div>

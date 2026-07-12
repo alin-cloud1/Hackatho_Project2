@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import type { FormEvent } from "react";
 import { Fingerprint, ImagePlus, Send, ShieldCheck, Clock, EyeOff, Users } from "lucide-react";
 import { useAppState } from "../state/AppStateContext";
-import { hashRollNumber } from "../lib/crypto";
 import { stripImageMetadata } from "../lib/exif";
-import type { Complaint, ComplaintCategory } from "../types";
+import type { ComplaintCategory } from "../types";
 import { Badge, Button, Card, Field, PageHeader, inputClass } from "../components/ui";
 import { StrikeMeter } from "../components/StrikeMeter";
 
@@ -17,30 +16,19 @@ const CATEGORIES: ComplaintCategory[] = [
   "Other",
 ];
 
+type AddComplaint = (payload: {
+  category: ComplaintCategory;
+  description: string;
+  hasPhoto: boolean;
+  photoStrippedMeta: boolean;
+}) => Promise<{ ok: boolean; error?: string }>;
+
 export function Whistleblower() {
-  const { currentStudent, complaints, addComplaint, strikeCount, isAdmin, isStudent } = useAppState();
+  const { complaints, addComplaint, strikeCount, isAdmin, isStudent } = useAppState();
 
-  // Resolve the current student's one-way hash so we can show them ONLY their
-  // own complaints without ever storing a raw roll number.
-  const [myHash, setMyHash] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    if (currentStudent && !currentStudent.isTeacher) {
-      hashRollNumber(currentStudent.rollNumber).then((h) => {
-        if (active) setMyHash(h);
-      });
-    }
-    return () => {
-      active = false;
-    };
-  }, [currentStudent]);
-
-  // Admins see the full log; students see only complaints tied to their hash.
-  const visibleComplaints = useMemo(() => {
-    if (isAdmin) return complaints;
-    if (myHash) return complaints.filter((c) => c.submitterHash === myHash);
-    return [];
-  }, [complaints, isAdmin, myHash]);
+  // The backend already returns only the caller's own complaints for students
+  // (matched by their server-side hash) and the full log for admins.
+  const visibleComplaints = complaints;
 
   return (
     <div>
@@ -56,9 +44,7 @@ export function Whistleblower() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {isStudent && (
-            <ComplaintForm addComplaint={addComplaint} rollNumber={currentStudent!.rollNumber} />
-          )}
+          {isStudent && <ComplaintForm addComplaint={addComplaint} />}
 
           {isAdmin && (
             <Card className="p-6">
@@ -145,23 +131,20 @@ export function Whistleblower() {
   );
 }
 
-function ComplaintForm({
-  addComplaint,
-  rollNumber,
-}: {
-  addComplaint: (c: Complaint) => void;
-  rollNumber: string;
-}) {
+function ComplaintForm({ addComplaint }: { addComplaint: AddComplaint }) {
   const [category, setCategory] = useState<ComplaintCategory>("Tiffin Theft");
   const [description, setDescription] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [stripping, setStripping] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!description.trim()) return;
+    setError(null);
 
+    // EXIF metadata is stripped client-side before we even flag the photo.
     let hasPhoto = false;
     let photoStrippedMeta = false;
     if (photo) {
@@ -177,18 +160,13 @@ function ComplaintForm({
       setStripping(false);
     }
 
-    const submitterHash = await hashRollNumber(rollNumber);
-
-    const complaint: Complaint = {
-      id: crypto.randomUUID(),
-      category,
-      description: description.trim(),
-      submitterHash,
-      hasPhoto,
-      photoStrippedMeta,
-      timestamp: Date.now(),
-    };
-    addComplaint(complaint);
+    // The raw roll number is hashed server-side (from the auth token) — it never
+    // leaves the client in the request body.
+    const res = await addComplaint({ category, description: description.trim(), hasPhoto, photoStrippedMeta });
+    if (!res.ok) {
+      setError(res.error ?? "Failed to file complaint.");
+      return;
+    }
     setDescription("");
     setPhoto(null);
     setSubmitted(true);
@@ -248,6 +226,11 @@ function ComplaintForm({
         {submitted && (
           <p className="flex items-center gap-2 rounded-lg border border-mint-500/30 bg-mint-500/10 px-3 py-2 text-xs font-medium text-mint-400">
             <ShieldCheck className="h-4 w-4" /> Complaint logged. Identity masked and untraceable.
+          </p>
+        )}
+        {error && (
+          <p className="rounded-lg border border-signal-500/30 bg-signal-500/10 px-3 py-2 text-xs font-medium text-signal-400">
+            {error}
           </p>
         )}
       </form>

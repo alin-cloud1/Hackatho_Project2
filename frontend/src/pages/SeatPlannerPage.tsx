@@ -1,17 +1,18 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff, Crown, Accessibility, Ruler, Save, Check } from "lucide-react";
-import { SEATABLE_ROSTER, KUDDUS } from "../data/mockData";
-import { planSeats } from "../lib/seatPlanner";
+import { KUDDUS } from "../data/mockData";
 import { needsFrontRow } from "../types";
-import type { Student } from "../types";
+import type { SeatPlan, SeatProfile, Student } from "../types";
+import { api } from "../lib/api";
 import { useAppState } from "../state/AppStateContext";
 import { Badge, Button, Card, Field, PageHeader, inputClass } from "../components/ui";
 
 export function SeatPlannerPage() {
-  const { currentStudent, seatProfiles, setSeatProfile } = useAppState();
+  const { currentStudent, setSeatProfile } = useAppState();
   const [rows, setRows] = useState(5);
   const [cols, setCols] = useState(5);
   const [aisleCol, setAisleCol] = useState(2); // -1 = no aisle
+  const [result, setResult] = useState<SeatPlan | null>(null);
 
   const aisleCols = useMemo(() => {
     const set = new Set<number>();
@@ -19,25 +20,46 @@ export function SeatPlannerPage() {
     return set;
   }, [aisleCol, cols]);
 
-  // Merge each roster member with any self-entered seat profile (keyed by roll).
-  const effectiveRoster = useMemo<Student[]>(
-    () =>
-      SEATABLE_ROSTER.map((s) => {
-        const p = seatProfiles[s.rollNumber];
-        return p
-          ? { ...s, heightCm: p.heightCm, visionImpaired: p.visionImpaired, hearingImpaired: p.hearingImpaired }
-          : s;
-      }),
-    [seatProfiles]
-  );
+  // The seating plan is computed server-side (merging persisted seat profiles).
+  const fetchPlan = useCallback(async () => {
+    try {
+      setResult(await api.getSeatPlan(rows, cols, aisleCol));
+    } catch {
+      setResult(null);
+    }
+  }, [rows, cols, aisleCol]);
 
-  const result = useMemo(
-    () => planSeats(effectiveRoster, rows, cols, aisleCols),
-    [effectiveRoster, rows, cols, aisleCols]
-  );
+  useEffect(() => {
+    fetchPlan();
+  }, [fetchPlan]);
 
   // The logged-in person can edit their OWN seat attributes (teacher has no seat).
   const canEditSelf = currentStudent && !currentStudent.isTeacher && !currentStudent.isKuddus;
+
+  // The caller's current effective attributes, pulled from the plan grid.
+  const myStudent = useMemo<Student | null>(() => {
+    if (!result || !currentStudent) return null;
+    for (const row of result.grid)
+      for (const seat of row) if (seat.student?.rollNumber === currentStudent.rollNumber) return seat.student;
+    return null;
+  }, [result, currentStudent]);
+
+  const handleSaveProfile = useCallback(
+    async (rollNumber: string, profile: SeatProfile) => {
+      const res = await setSeatProfile(rollNumber, profile);
+      if (res.ok) await fetchPlan();
+      return res;
+    },
+    [setSeatProfile, fetchPlan]
+  );
+
+  if (!result) {
+    return (
+      <div>
+        <PageHeader eyebrow="Mission 2" title="Anti-Camouflage Seat Planner" description="Loading the classroom grid…" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -155,10 +177,8 @@ export function SeatPlannerPage() {
             <SelfSeatForm
               rollNumber={currentStudent!.rollNumber}
               name={currentStudent!.name}
-              initial={
-                effectiveRoster.find((s) => s.rollNumber === currentStudent!.rollNumber) ?? null
-              }
-              onSave={setSeatProfile}
+              initial={myStudent}
+              onSave={handleSaveProfile}
             />
           ) : (
             <Card className="p-6">
@@ -245,17 +265,26 @@ function SelfSeatForm({
   rollNumber: string;
   name: string;
   initial: Student | null;
-  onSave: (roll: string, p: { heightCm: number; visionImpaired: boolean; hearingImpaired: boolean }) => void;
+  onSave: (roll: string, p: SeatProfile) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [height, setHeight] = useState<string>(String(initial?.heightCm ?? 150));
   const [vision, setVision] = useState<boolean>(initial?.visionImpaired ?? false);
   const [hearing, setHearing] = useState<boolean>(initial?.hearingImpaired ?? false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = () => {
+  const submit = async () => {
     const h = Number(height);
-    if (!Number.isFinite(h) || h < 100 || h > 210) return;
-    onSave(rollNumber, { heightCm: Math.round(h), visionImpaired: vision, hearingImpaired: hearing });
+    if (!Number.isFinite(h) || h < 100 || h > 210) {
+      setError("Height must be 100–210 cm.");
+      return;
+    }
+    setError(null);
+    const res = await onSave(rollNumber, { heightCm: Math.round(h), visionImpaired: vision, hearingImpaired: hearing });
+    if (!res.ok) {
+      setError(res.error ?? "Failed to save.");
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -306,6 +335,7 @@ function SelfSeatForm({
             </>
           )}
         </Button>
+        {error && <p className="text-[11px] font-medium text-signal-400">{error}</p>}
       </div>
     </Card>
   );
