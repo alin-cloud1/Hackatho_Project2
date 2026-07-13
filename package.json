@@ -2,7 +2,7 @@
   "name": "anti-kuddus-protocol",
   "version": "1.0.0",
   "private": true,
-  "description": "Anti-Kuddus Protocol — full-stack monorepo (React frontend + Node/SQLite backend).",
+  "description": "Anti-Kuddus Protocol — full-stack monorepo (React frontend + Node/MongoDB backend).",
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,magenta -k \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "build": "npm --prefix frontend run build",
