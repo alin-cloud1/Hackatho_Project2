@@ -14,8 +14,7 @@ export const config = {
   },
   rollHashSalt: process.env.ROLL_HASH_SALT || "anti-kuddus-protocol-v1",
   db: {
-    // SQLite database file (built-in node:sqlite). Defaults to backend/data/anti_kuddus.db.
-    file: process.env.SQLITE_FILE || "",
+    url: process.env.DATABASE_URL || "",
   },
   groq: {
     apiKey: process.env.GROQ_API_KEY || "",

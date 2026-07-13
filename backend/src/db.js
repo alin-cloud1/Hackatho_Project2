@@ -1,58 +1,44 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
+import pg from "pg";
 import { config } from "./config.js";
 
-// SQLite (built into Node ≥ 22.5 as node:sqlite) — zero-install, file-based.
-// A thin shim keeps the pg-style call sites unchanged: `$1` placeholders,
-// boolean params, and a `{ rows }` return shape.
+// PostgreSQL, via node-postgres. Call sites already use `$1` placeholders
+// and `await query(...)`, so no route changes are needed for this backend.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbFile = config.db.file || path.join(__dirname, "..", "data", "anti_kuddus.db");
+// created_at/updated_at are BIGINT (epoch ms). node-postgres returns BIGINT
+// (OID 20) as a string by default to avoid precision loss beyond 2^53, but
+// every epoch-ms timestamp we store fits safely in a JS number, and the
+// frontend types (timestamp: number) rely on that.
+pg.types.setTypeParser(20, (val) => parseInt(val, 10));
 
-fs.mkdirSync(path.dirname(dbFile), { recursive: true });
-
-export const db = new DatabaseSync(dbFile);
-db.exec("PRAGMA journal_mode = WAL;");
-db.exec("PRAGMA foreign_keys = ON;");
-
-function convertPlaceholders(sql) {
-  // $1, $2, ... -> ?  (SQLite uses positional ?).
-  return sql.replace(/\$(\d+)/g, "?");
+const connectionString = config.db.url;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set — add it to backend/.env");
 }
 
-function normalizeParams(params = []) {
-  return params.map((p) => {
-    if (typeof p === "boolean") return p ? 1 : 0;
-    if (p === undefined) return null;
-    return p;
-  });
-}
+// Managed Postgres providers (Render, Supabase, Neon, ...) terminate TLS with
+// a cert chain Node doesn't trust by default; a plain local Postgres doesn't
+// use TLS at all.
+const isLocal = /localhost|127\.0\.0\.1/.test(connectionString);
 
-const RETURNS_ROWS = /^\s*(select|with)\b|returning\b/i;
+export const pool = new pg.Pool({
+  connectionString,
+  ssl: isLocal ? false : { rejectUnauthorized: false },
+});
 
-/** pg-compatible query helper: returns { rows }. */
-export function query(text, params = []) {
-  const sql = convertPlaceholders(text);
-  const stmt = db.prepare(sql);
-  const args = normalizeParams(params);
-  if (RETURNS_ROWS.test(text)) {
-    return { rows: stmt.all(...args) };
-  }
-  const info = stmt.run(...args);
-  return { rows: [], rowCount: info.changes };
+/** pg-compatible query helper: returns { rows, rowCount }. */
+export async function query(text, params = []) {
+  return pool.query(text, params);
 }
 
 /** Run raw multi-statement SQL (schema files). */
-export function exec(sql) {
-  db.exec(sql);
+export async function exec(sql) {
+  await pool.query(sql);
 }
 
 export async function assertDbConnection() {
   try {
-    db.prepare("SELECT 1").get();
+    await pool.query("SELECT 1");
   } catch (err) {
-    throw new Error(`SQLite database at ${dbFile} is not usable — ${err.message}`);
+    throw new Error(`Postgres connection failed — ${err.message}`);
   }
 }

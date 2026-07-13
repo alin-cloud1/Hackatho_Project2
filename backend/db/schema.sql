@@ -1,6 +1,6 @@
--- Anti-Kuddus Protocol — SQLite schema (node:sqlite).
+-- Anti-Kuddus Protocol — PostgreSQL schema.
 -- Safe to re-run: drops and recreates all objects.
--- Booleans are stored as INTEGER 0/1; timestamps as epoch milliseconds.
+-- Timestamps are stored as epoch milliseconds (BIGINT) to match app code (Date.now()).
 
 DROP TABLE IF EXISTS complaints;
 DROP TABLE IF EXISTS ledger_entries;
@@ -16,11 +16,11 @@ CREATE TABLE students (
   roll_number      TEXT PRIMARY KEY,
   name             TEXT NOT NULL,
   height_cm        INTEGER NOT NULL,
-  vision_impaired  INTEGER NOT NULL DEFAULT 0,
-  hearing_impaired INTEGER NOT NULL DEFAULT 0,
+  vision_impaired  BOOLEAN NOT NULL DEFAULT FALSE,
+  hearing_impaired BOOLEAN NOT NULL DEFAULT FALSE,
   role             TEXT CHECK (role IN ('admin', 'student')),  -- NULL = no access (Kuddus)
-  is_kuddus        INTEGER NOT NULL DEFAULT 0,
-  is_teacher       INTEGER NOT NULL DEFAULT 0,
+  is_kuddus        BOOLEAN NOT NULL DEFAULT FALSE,
+  is_teacher       BOOLEAN NOT NULL DEFAULT FALSE,
   pin              TEXT                                          -- NULL = login revoked
 );
 
@@ -31,9 +31,9 @@ CREATE TABLE complaints (
   category            TEXT NOT NULL,
   description         TEXT NOT NULL,
   submitter_hash      TEXT NOT NULL,
-  has_photo           INTEGER NOT NULL DEFAULT 0,
-  photo_stripped_meta INTEGER NOT NULL DEFAULT 0,
-  created_at          INTEGER NOT NULL
+  has_photo           BOOLEAN NOT NULL DEFAULT FALSE,
+  photo_stripped_meta BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at          BIGINT NOT NULL
 );
 CREATE INDEX idx_complaints_hash ON complaints (submitter_hash);
 CREATE INDEX idx_complaints_created ON complaints (created_at DESC);
@@ -42,9 +42,9 @@ CREATE INDEX idx_complaints_created ON complaints (created_at DESC);
 CREATE TABLE seat_profiles (
   roll_number      TEXT PRIMARY KEY REFERENCES students (roll_number) ON DELETE CASCADE,
   height_cm        INTEGER NOT NULL,
-  vision_impaired  INTEGER NOT NULL DEFAULT 0,
-  hearing_impaired INTEGER NOT NULL DEFAULT 0,
-  updated_at       INTEGER NOT NULL
+  vision_impaired  BOOLEAN NOT NULL DEFAULT FALSE,
+  hearing_impaired BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at       BIGINT NOT NULL
 );
 
 -- M4: corrupt-economy ledger. 'toll' entries carry amount_taka; 'food' carry calories.
@@ -54,7 +54,7 @@ CREATE TABLE ledger_entries (
   label       TEXT NOT NULL,
   amount_taka INTEGER NOT NULL DEFAULT 0,
   calories    INTEGER NOT NULL DEFAULT 0,
-  created_at  INTEGER NOT NULL
+  created_at  BIGINT NOT NULL
 );
 CREATE INDEX idx_ledger_created ON ledger_entries (created_at);
 
@@ -63,7 +63,7 @@ CREATE TABLE sos_alerts (
   id         TEXT PRIMARY KEY,
   location   TEXT NOT NULL,
   status     TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('queued', 'sent', 'acknowledged')),
-  created_at INTEGER NOT NULL
+  created_at BIGINT NOT NULL
 );
 CREATE INDEX idx_sos_created ON sos_alerts (created_at DESC);
 
@@ -79,7 +79,7 @@ CREATE TABLE rulebook (
 
 -- M3: official curriculum topics used as RAG retrieval context.
 CREATE TABLE curriculum_topics (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  id        SERIAL PRIMARY KEY,
   topic     TEXT NOT NULL,
   embedding TEXT
 );

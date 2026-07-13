@@ -1,7 +1,13 @@
 # Render Blueprint — deploys the Node/Express backend as a free web service.
 # In the Render dashboard: New + → Blueprint → connect this repo. Render reads
-# this file automatically. After it deploys, set the two "sync: false" secrets
-# (GROQ_API_KEY and CORS_ORIGIN) in the service's Environment tab.
+# this file automatically. After it deploys, set the "sync: false" secrets
+# (DATABASE_URL, GROQ_API_KEY, CORS_ORIGIN) in the service's Environment tab.
+#
+# The Postgres schema is NOT created/seeded here on boot — schema.sql drops
+# and recreates every table, so running it on each deploy would wipe live
+# data. Run `npm run db:setup && npm run db:seed` once from your machine
+# against the same DATABASE_URL (as already done), and again by hand only
+# when the schema actually changes.
 services:
   - type: web
     name: anti-kuddus-backend
@@ -9,8 +15,7 @@ services:
     rootDir: backend
     plan: free
     buildCommand: npm install
-    # Seed the SQLite DB on first boot (ephemeral fs), then start the API server.
-    startCommand: sh -c "if [ ! -f data/anti_kuddus.db ]; then node scripts/setup-db.js && node scripts/seed-db.js; fi; node src/index.js"
+    startCommand: node src/index.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
@@ -23,6 +28,8 @@ services:
         value: llama-3.3-70b-versatile
       - key: JWT_SECRET
         generateValue: true # Render generates a strong secret automatically
+      - key: DATABASE_URL
+        sync: false # paste your Postgres connection string in the dashboard (kept out of git)
       - key: GROQ_API_KEY
         sync: false # paste your Groq key in the dashboard (kept out of git)
       - key: CORS_ORIGIN

@@ -33,25 +33,18 @@ app.use("/api/syllabus", syllabusRoutes);
 app.use("/api/sos", sosRoutes);
 app.use("/api/factcheck", factcheckRoutes);
 
-// ---- Single-server mode ---------------------------------------------------
-// If the frontend has been built, serve its static bundle from this same
-// origin so the whole app runs on one port. `npm run build` at the repo root
-// produces frontend/dist; run `npm start` to build + serve here.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.resolve(__dirname, "..", "..", "frontend", "dist");
 const serveClient = fs.existsSync(path.join(clientDir, "index.html"));
 
 if (serveClient) {
   app.use(express.static(clientDir));
-  // SPA fallback: any non-API GET returns index.html so client-side routing works.
   app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => {
     res.sendFile(path.join(clientDir, "index.html"));
   });
 }
 
-// 404 (unmatched /api routes) + centralized error handler.
 app.use((_req, res) => res.status(404).json({ error: "Not found." }));
-// eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   console.error("API error:", err);
   res.status(500).json({ error: "Internal server error." });

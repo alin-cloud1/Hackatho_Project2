@@ -1,7 +1,7 @@
 // Seeds roster, rulebook, and curriculum. If GEMINI_API_KEY is set, also
 // precomputes embeddings for rulebook + curriculum (used by semantic search
 // and RAG retrieval). Run: npm run db:seed
-import { db, query } from "../src/db.js";
+import { pool, query } from "../src/db.js";
 import { embeddingsEnabled } from "../src/config.js";
 import { embedText } from "../src/services/rag.js";
 import { ROSTER, RULEBOOK, CURRICULUM_TOPICS } from "../src/data/seedData.js";
@@ -49,12 +49,7 @@ async function seedRulebook() {
 
 async function seedCurriculum() {
   await query("DELETE FROM curriculum_topics");
-  // sqlite_sequence only exists once an AUTOINCREMENT row has been inserted.
-  try {
-    await query("DELETE FROM sqlite_sequence WHERE name = 'curriculum_topics'");
-  } catch {
-    // no sequence yet — fine on a fresh database
-  }
+  await query("ALTER SEQUENCE curriculum_topics_id_seq RESTART WITH 1");
   for (const topic of CURRICULUM_TOPICS) {
     let embedding = null;
     if (embedDuringSeed) {
@@ -77,7 +72,7 @@ async function main() {
   await seedRulebook();
   await seedCurriculum();
   console.log(embedDuringSeed ? "Done. RAG embeddings ready." : "Done. (LLM RAG uses full-context injection; no local embeddings needed.)");
-  db.close();
+  await pool.end();
 }
 
 main().catch((err) => {
