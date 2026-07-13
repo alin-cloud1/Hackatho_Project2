@@ -1,44 +1,54 @@
-// Quick read-only peek at any table's rows.
-// Run:        node scripts/view-table.js <table> [limit]
-// Watch mode: node scripts/view-table.js <table> [limit] --watch [intervalSeconds]
-import { pool } from "../src/db.js";
+// Quick read-only peek at any MongoDB collection's documents.
+// Run:        node scripts/view-table.js <collection> [limit]
+// Watch mode: node scripts/view-table.js <collection> [limit] --watch [intervalSeconds]
+import { connectDb, collections, closeDb } from "../src/db.js";
 
 const args = process.argv.slice(2).filter((a) => a !== "--watch");
 const watch = process.argv.includes("--watch");
-const table = args[0];
+const name = args[0];
 const limit = Number(args[1]) || 20;
 const intervalMs = (Number(args[2]) || 3) * 1000;
 
-const ALLOWED = [
-  "students",
-  "complaints",
-  "seat_profiles",
-  "ledger_entries",
-  "sos_alerts",
-  "rulebook",
-  "curriculum_topics",
-];
+// Accept both the Mongo collection names and the old snake_case table names.
+const ALIASES = {
+  students: "students",
+  complaints: "complaints",
+  seatprofiles: "seatProfiles",
+  seat_profiles: "seatProfiles",
+  ledgerentries: "ledgerEntries",
+  ledger_entries: "ledgerEntries",
+  sosalerts: "sosAlerts",
+  sos_alerts: "sosAlerts",
+  rulebook: "rulebook",
+  curriculumtopics: "curriculumTopics",
+  curriculum_topics: "curriculumTopics",
+};
 
-if (!table || !ALLOWED.includes(table)) {
+const collName = name ? ALIASES[name.toLowerCase()] : undefined;
+if (!collName) {
   console.error(
-    `Usage: node scripts/view-table.js <table> [limit] [--watch [intervalSeconds]]\nTables: ${ALLOWED.join(", ")}`
+    `Usage: node scripts/view-table.js <collection> [limit] [--watch [intervalSeconds]]\n` +
+      `Collections: ${[...new Set(Object.values(ALIASES))].join(", ")}`
   );
   process.exit(1);
 }
 
-const orderCol = ["complaints", "ledger_entries", "sos_alerts"].includes(table) ? "created_at DESC" : null;
-const sql = `SELECT * FROM ${table}${orderCol ? ` ORDER BY ${orderCol}` : ""} LIMIT $1`;
+// Newest-first for time-ordered collections.
+const sortByCreated = ["complaints", "ledgerEntries", "sosAlerts"].includes(collName);
 
 async function fetchRows() {
-  const { rows } = await pool.query(sql, [limit]);
-  return rows;
+  const cursor = collections[collName].find({}, { projection: { _id: 0 } });
+  if (sortByCreated) cursor.sort({ createdAt: -1 });
+  return cursor.limit(limit).toArray();
 }
 
 function printSnapshot(rows) {
   console.clear();
-  console.log(`${table} — ${new Date().toLocaleTimeString()} (${rows.length} row${rows.length === 1 ? "" : "s"})`);
+  console.log(`${collName} — ${new Date().toLocaleTimeString()} (${rows.length} doc${rows.length === 1 ? "" : "s"})`);
   console.table(rows);
 }
+
+await connectDb();
 
 if (!watch) {
   try {
@@ -46,17 +56,17 @@ if (!watch) {
   } catch (err) {
     console.error("Query failed:", err.message);
   } finally {
-    await pool.end();
+    await closeDb();
   }
 } else {
-  console.log(`Watching "${table}" every ${intervalMs / 1000}s — Ctrl+C to stop.`);
+  console.log(`Watching "${collName}" every ${intervalMs / 1000}s — Ctrl+C to stop.`);
   let lastSnapshot = "";
   let stopped = false;
 
   process.on("SIGINT", async () => {
     stopped = true;
     console.log("\nStopped.");
-    await pool.end();
+    await closeDb();
     process.exit(0);
   });
 
