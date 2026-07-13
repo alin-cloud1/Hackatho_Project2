@@ -14,8 +14,9 @@ export const config = {
   },
   rollHashSalt: process.env.ROLL_HASH_SALT || "anti-kuddus-protocol-v1",
   db: {
-    // SQLite database file (built-in node:sqlite). Defaults to backend/data/anti_kuddus.db.
-    file: process.env.SQLITE_FILE || "",
+    // MongoDB connection. Local mongod by default; set MONGODB_URI for Atlas.
+    uri: process.env.MONGODB_URI || "mongodb://127.0.0.1:27017",
+    name: process.env.MONGODB_DB || "anti_kuddus",
   },
   groq: {
     apiKey: process.env.GROQ_API_KEY || "",

@@ -1,58 +1,53 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
+import { MongoClient } from "mongodb";
 import { config } from "./config.js";
 
-// SQLite (built into Node ≥ 22.5 as node:sqlite) — zero-install, file-based.
-// A thin shim keeps the pg-style call sites unchanged: `$1` placeholders,
-// boolean params, and a `{ rows }` return shape.
+// MongoDB data layer. Every student input/update persists to the
+// `anti_kuddus` database — local mongod by default, or set MONGODB_URI
+// (e.g. an Atlas connection string) for a remote cluster.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbFile = config.db.file || path.join(__dirname, "..", "data", "anti_kuddus.db");
+const client = new MongoClient(config.db.uri);
 
-fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+const COLLECTION_NAMES = [
+  "students",
+  "complaints",
+  "seatProfiles",
+  "ledgerEntries",
+  "sosAlerts",
+  "rulebook",
+  "curriculumTopics",
+];
 
-export const db = new DatabaseSync(dbFile);
-db.exec("PRAGMA journal_mode = WAL;");
-db.exec("PRAGMA foreign_keys = ON;");
+export const collections = {};
+let db = null;
 
-function convertPlaceholders(sql) {
-  // $1, $2, ... -> ?  (SQLite uses positional ?).
-  return sql.replace(/\$(\d+)/g, "?");
+export async function connectDb() {
+  if (db) return db;
+  await client.connect();
+  db = client.db(config.db.name);
+  for (const name of COLLECTION_NAMES) collections[name] = db.collection(name);
+  await Promise.all([
+    collections.students.createIndex({ rollNumber: 1 }, { unique: true }),
+    collections.complaints.createIndex({ submitterHash: 1 }),
+    collections.complaints.createIndex({ createdAt: -1 }),
+    collections.seatProfiles.createIndex({ rollNumber: 1 }, { unique: true }),
+    collections.ledgerEntries.createIndex({ createdAt: 1 }),
+    collections.sosAlerts.createIndex({ createdAt: -1 }),
+    collections.rulebook.createIndex({ id: 1 }, { unique: true }),
+  ]);
+  return db;
 }
 
-function normalizeParams(params = []) {
-  return params.map((p) => {
-    if (typeof p === "boolean") return p ? 1 : 0;
-    if (p === undefined) return null;
-    return p;
-  });
-}
-
-const RETURNS_ROWS = /^\s*(select|with)\b|returning\b/i;
-
-/** pg-compatible query helper: returns { rows }. */
-export function query(text, params = []) {
-  const sql = convertPlaceholders(text);
-  const stmt = db.prepare(sql);
-  const args = normalizeParams(params);
-  if (RETURNS_ROWS.test(text)) {
-    return { rows: stmt.all(...args) };
-  }
-  const info = stmt.run(...args);
-  return { rows: [], rowCount: info.changes };
-}
-
-/** Run raw multi-statement SQL (schema files). */
-export function exec(sql) {
-  db.exec(sql);
+export function getDb() {
+  if (!db) throw new Error("Database not connected — call connectDb() first.");
+  return db;
 }
 
 export async function assertDbConnection() {
-  try {
-    db.prepare("SELECT 1").get();
-  } catch (err) {
-    throw new Error(`SQLite database at ${dbFile} is not usable — ${err.message}`);
-  }
+  await connectDb();
+  await db.command({ ping: 1 });
+}
+
+export async function closeDb() {
+  await client.close();
+  db = null;
 }

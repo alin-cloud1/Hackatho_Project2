@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { query } from "../db.js";
+import { collections } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { planSeats } from "../lib/seatPlanner.js";
 
@@ -8,24 +8,21 @@ const router = Router();
 // Build the effective roster: base roster merged with any student-entered
 // seat profiles, excluding the teacher (who has no desk).
 async function effectiveRoster() {
-  const { rows } = await query(`
-    SELECT s.roll_number, s.name, s.is_kuddus, s.is_teacher,
-           COALESCE(p.height_cm, s.height_cm)               AS height_cm,
-           COALESCE(p.vision_impaired, s.vision_impaired)   AS vision_impaired,
-           COALESCE(p.hearing_impaired, s.hearing_impaired) AS hearing_impaired
-    FROM students s
-    LEFT JOIN seat_profiles p ON p.roll_number = s.roll_number
-    WHERE s.is_teacher = FALSE
-    ORDER BY s.roll_number
-  `);
-  return rows.map((r) => ({
-    rollNumber: r.roll_number,
-    name: r.name,
-    heightCm: r.height_cm,
-    visionImpaired: Boolean(r.vision_impaired),
-    hearingImpaired: Boolean(r.hearing_impaired),
-    isKuddus: Boolean(r.is_kuddus),
-  }));
+  const students = await collections.students.find({ isTeacher: { $ne: true } }).sort({ rollNumber: 1 }).toArray();
+  const profiles = await collections.seatProfiles.find().toArray();
+  const byRoll = new Map(profiles.map((p) => [p.rollNumber, p]));
+
+  return students.map((s) => {
+    const p = byRoll.get(s.rollNumber);
+    return {
+      rollNumber: s.rollNumber,
+      name: s.name,
+      heightCm: p?.heightCm ?? s.heightCm,
+      visionImpaired: Boolean(p ? p.visionImpaired : s.visionImpaired),
+      hearingImpaired: Boolean(p ? p.hearingImpaired : s.hearingImpaired),
+      isKuddus: Boolean(s.isKuddus),
+    };
+  });
 }
 
 // GET /api/seating/plan?rows=5&cols=5&aisle=2
@@ -48,11 +45,10 @@ router.get("/plan", requireAuth, async (req, res, next) => {
 // GET /api/seating/profile — the caller's own saved seat attributes.
 router.get("/profile", requireAuth, async (req, res, next) => {
   try {
-    const { rows } = await query("SELECT * FROM seat_profiles WHERE roll_number = $1", [req.user.rollNumber]);
-    if (!rows[0]) return res.json({ profile: null });
-    const p = rows[0];
+    const p = await collections.seatProfiles.findOne({ rollNumber: req.user.rollNumber });
+    if (!p) return res.json({ profile: null });
     return res.json({
-      profile: { heightCm: p.height_cm, visionImpaired: Boolean(p.vision_impaired), hearingImpaired: Boolean(p.hearing_impaired) },
+      profile: { heightCm: p.heightCm, visionImpaired: Boolean(p.visionImpaired), hearingImpaired: Boolean(p.hearingImpaired) },
     });
   } catch (err) {
     next(err);
@@ -67,15 +63,17 @@ router.put("/profile", requireAuth, async (req, res, next) => {
     const h = Number(heightCm);
     if (!Number.isFinite(h) || h < 100 || h > 210) return res.status(400).json({ error: "Height must be 100–210 cm." });
 
-    await query(
-      `INSERT INTO seat_profiles (roll_number, height_cm, vision_impaired, hearing_impaired, updated_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (roll_number)
-       DO UPDATE SET height_cm = excluded.height_cm,
-                     vision_impaired = excluded.vision_impaired,
-                     hearing_impaired = excluded.hearing_impaired,
-                     updated_at = excluded.updated_at`,
-      [req.user.rollNumber, Math.round(h), Boolean(visionImpaired), Boolean(hearingImpaired), Date.now()]
+    await collections.seatProfiles.updateOne(
+      { rollNumber: req.user.rollNumber },
+      {
+        $set: {
+          heightCm: Math.round(h),
+          visionImpaired: Boolean(visionImpaired),
+          hearingImpaired: Boolean(hearingImpaired),
+          updatedAt: Date.now(),
+        },
+      },
+      { upsert: true }
     );
     return res.json({ ok: true });
   } catch (err) {

@@ -1,7 +1,7 @@
 {
   "name": "anti-kuddus-backend",
   "version": "1.0.0",
-  "description": "Anti-Kuddus Protocol backend — Node.js + Express + PostgreSQL API for the Class 7-B resistance.",
+  "description": "Anti-Kuddus Protocol backend — Node.js + Express + MongoDB API for the Class 7-B resistance.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -18,6 +18,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "mongodb": "^7.5.0",
     "ws": "^8.18.0"
   }
 }

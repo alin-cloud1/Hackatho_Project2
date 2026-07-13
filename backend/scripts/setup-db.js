@@ -1,17 +1,16 @@
-// Creates the schema (drops + recreates all tables). Run: npm run db:setup
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { db, exec } from "../src/db.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Resets the MongoDB database (drops all collections, recreates indexes).
+// Run: npm run db:setup
+import { connectDb, collections, closeDb } from "../src/db.js";
 
 try {
-  const sql = fs.readFileSync(path.join(__dirname, "..", "db", "schema.sql"), "utf8");
-  exec(sql);
-  console.log("✓ Schema created (tables reset).");
-  db.close();
+  await connectDb();
+  for (const [name, coll] of Object.entries(collections)) {
+    await coll.deleteMany({});
+    console.log(`  cleared ${name}`);
+  }
+  console.log("✓ MongoDB collections reset (indexes in place).");
+  await closeDb();
 } catch (err) {
-  console.error("Schema setup failed:", err.message);
+  console.error("Database setup failed:", err.message);
   process.exit(1);
 }

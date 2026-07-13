@@ -1,5 +1,5 @@
 import { llmEnabled } from "../config.js";
-import { query } from "../db.js";
+import { collections } from "../db.js";
 import { generateJson } from "./rag.js";
 
 // Words that signal Kuddus is claiming a permission/exemption the rulebook denies.
@@ -74,9 +74,8 @@ Return ONLY JSON:
 }
 
 export async function factCheck(claim) {
-  const { rows } = await query("SELECT id, section, body, keywords FROM rulebook");
-  // keywords is stored as JSON text in SQLite.
-  const rules = rows.map((r) => ({ ...r, keywords: Array.isArray(r.keywords) ? r.keywords : JSON.parse(r.keywords || "[]") }));
+  const rows = await collections.rulebook.find().project({ _id: 0, id: 1, section: 1, body: 1, keywords: 1 }).toArray();
+  const rules = rows.map((r) => ({ ...r, keywords: Array.isArray(r.keywords) ? r.keywords : [] }));
 
   if (llmEnabled) {
     try {

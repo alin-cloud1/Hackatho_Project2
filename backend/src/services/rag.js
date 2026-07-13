@@ -1,5 +1,5 @@
 import { config, ragEnabled, llmProvider, embeddingsEnabled } from "../config.js";
-import { query } from "../db.js";
+import { collections } from "../db.js";
 import { CURRICULUM_TOPICS } from "../data/seedData.js";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -128,19 +128,19 @@ function cosineSimilarity(a, b) {
 // ---------------------------------------------------------------------------
 
 async function retrieveCurriculumContext(syllabusText, topK = 12) {
-  const { rows } = await query("SELECT topic, embedding FROM curriculum_topics WHERE embedding IS NOT NULL");
+  const rows = await collections.curriculumTopics.find({ embedding: { $ne: null } }).toArray();
 
   // No stored embeddings yet (e.g. the key was added AFTER seeding). The
   // curriculum is small, so inject ALL topics as context rather than a weak
   // slice — the LLM still gets the full ground truth to filter against.
   if (rows.length === 0) {
-    const all = await query("SELECT topic FROM curriculum_topics");
-    return all.rows.length ? all.rows.map((r) => r.topic) : CURRICULUM_TOPICS;
+    const all = await collections.curriculumTopics.find().toArray();
+    return all.length ? all.map((r) => r.topic) : CURRICULUM_TOPICS;
   }
 
   const queryVec = await embedText(syllabusText);
   return rows
-    .map((r) => ({ topic: r.topic, score: cosineSimilarity(queryVec, JSON.parse(r.embedding)) }))
+    .map((r) => ({ topic: r.topic, score: cosineSimilarity(queryVec, r.embedding) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, topK)
     .map((r) => r.topic);
