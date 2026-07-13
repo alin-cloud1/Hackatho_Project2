@@ -4,6 +4,7 @@ node_modules/
 !.env.example
 *.log
 
-# SQLite database files (regenerate with npm run db:setup && npm run db:seed)
-data/
+# SQLite database files (regenerate with npm run db:setup && npm run db:seed).
+# Anchored to the backend root so it does NOT match src/data/ (seed source).
+/data/
 
